@@ -7,9 +7,9 @@ phii = 3
 phif = 123
 dphi = 3
 channel = 372.00003
-symmetry = 2
-indice_de_plotagem =0
-shirley_tempo = 0.5
+symmetry = 1
+indice_de_plotagem = 0
+shirley_tempo = 1
 poli_tempo = 0.5
 fft_tempo = 0.5
 arquivo_saida = "exp.txt"
@@ -64,7 +64,7 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
         plt.ylabel('Intensity')
         plt.legend()
 
-        plt.draw()
+        plt.show()
         plt.pause(fft_tempo)
 
         plt.close()
@@ -143,7 +143,6 @@ import matplotlib.pyplot as plt
 from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter1d
-import time
 import matplotlib
 matplotlib.use('TkAgg')
 plt.ion()
@@ -244,7 +243,7 @@ def process_file(file_name, output_file):
             def double_gaussian(x, amp1, mean1, std1, amp2, mean2, std2):
                 return (gaussian_fit(x, amp1, mean1, std1) + gaussian_fit(x, amp2, mean2, std2))
 
-            initial_guess = [20000, 10, 5,                           5000, 30, 2]
+            initial_guess = [20000, 10, 5, 5000, 30, 2]
             bounds = ([10000, 5, 1, 500, 25, 1], [70000, 15, 10, 20000, 35, 4])
             try:
                 popt, _ = curve_fit(double_gaussian, x_values, positive_values, p0=initial_guess, bounds=bounds)
@@ -278,7 +277,7 @@ def process_file(file_name, output_file):
             plt.title(title)
             plt.legend()
             plt.grid(True)
-            plt.draw()
+            plt.show()
             plt.pause(shirley_tempo)
             plt.close()
 
@@ -298,7 +297,7 @@ def process_file(file_name, output_file):
             plt.title(title)
             plt.legend()
             plt.grid(True)
-            plt.draw()
+            plt.show()
             plt.pause(shirley_tempo)
             plt.close()
 
@@ -322,7 +321,7 @@ def process_file(file_name, output_file):
             filepath = os.path.join(save_dir, filename)
             # Salvar a figura
             plt.savefig(filepath, dpi=300, bbox_inches='tight')
-            plt.draw()
+            plt.show()
             plt.pause(shirley_tempo)
             plt.close()
         return list(zip(y_corrected_smoothed, x_values)), total_area
@@ -449,7 +448,7 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             plt.ylabel("Intensity")
             plt.legend()
             plt.grid()
-            plt.draw()
+            plt.show()
             plt.pause(poli_tempo)
             plt.close()
 
@@ -691,12 +690,19 @@ def process_file(file_path):
     phi_interval = phi_max - phi_min
 
     if phi_interval < 360 and df['Phi'].max() < 360:
-        # Encontrar os pontos com Phi = 0 e duplicar como Phi = 360
         df_360 = df[df['Phi'] == 0].copy()
         df_360['Phi'] = 360
         df = pd.concat([df, df_360], ignore_index=True)
 
     if phi_interval == 120:
+        # Replicação dos dados para cobrir 360 graus
+        first_values = df.groupby('Theta').first().reset_index()
+        df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
+        last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
+        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
+        # Adicionar os novos valores ao DataFrame
+        df = pd.concat([df, last_values], ignore_index=True)
+
         df_0_120 = df.copy()
         df_0_120['Phi'] = 120 + df_0_120['Phi']
         df_0_120['isOriginal'] = False
@@ -704,24 +710,7 @@ def process_file(file_path):
         df_240_360 = df.copy()
         df_240_360['Phi'] = 240 + df_240_360['Phi']
 
-        df_full = pd.concat([df, df_0_120, df_240_360]).reset_index(drop=True)
-        return df_full
-
-    if phi_interval == 90:
-        # Replicar os dados para cobrir os 360 graus (marcando-os como não originais)
-        df_0_90 = df.copy()
-        df_0_90['Phi'] = 90 + df_0_90['Phi']
-        df_0_90['IsOriginal'] = False
-
-        df_90_180 = df.copy()
-        df_90_180['Phi'] = 180 + df_90_180['Phi']
-        df_90_180['IsOriginal'] = False
-
-        df_180_270 = df.copy()
-        df_180_270['Phi'] = 270 + df_180_270['Phi']
-        df_180_270['IsOriginal'] = False
-        df_full = pd.concat([df, df_0_90, df_90_180, df_180_270]).reset_index(drop=True)
-        return df_full
+        df = pd.concat([df, df_0_120, df_240_360]).reset_index(drop=True)
 
     return df
 
