@@ -91,17 +91,12 @@ def process_file(file_path):
 
             elif len(parts) == 5 and theta_value is not None:
                 phi = float(parts[0])
-                intensitycal = float(parts[4])
-                intensityexp = float(parts[3])
+                intensitycal = float(parts[3])
+                intensityexp = float(parts[4])
                 data.append([phi, intensitycal, theta_value, intensityexp, True])  # Marcar como original
 
     df = pd.DataFrame(data, columns=['Phi', 'intensitycal', 'Theta', 'intensityexp', 'IsOriginal'])
     resultados, angulos, r_factor_medio, r_factor_total = calcular_r_factor(df)
-    for theta, r_factor in zip(angulos, resultados):
-        print(f'Theta: {theta}, R-factor: {r_factor}')
-
-    print(f'R-factor médio: {r_factor_medio}')
-    print(f'R-factor total: {r_factor_total}')
 
     # Verificar o intervalo de Phi
     phi_min = df['Phi'].min()
@@ -116,7 +111,7 @@ def process_file(file_path):
     if phi_interval == 120:
         # Replicação dos dados para cobrir 360 graus
         first_values = df.groupby('Theta').first().reset_index()
-        df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
+        df = df.groupby('Theta', group_keys=False, as_index=False).apply(lambda x: x.drop(x.index[0]))
         last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
         last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
         # Adicionar os novos valores ao DataFrame
@@ -134,7 +129,7 @@ def process_file(file_path):
     if phi_interval == 90:
         # Replicação dos dados para cobrir 360 graus
         first_values = df.groupby('Theta').first().reset_index()
-        df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
+        df = df.groupby('Theta', group_keys=False, as_index=False).apply(lambda x: x.drop(x.index[0]))
         last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
         last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
 
@@ -151,9 +146,7 @@ def process_file(file_path):
 
         df = pd.concat([df, df_0_90, df_180_270]).reset_index(drop=True)
 
-
-
-    return df
+    return df, r_factor_total  # Retorna r_factor_total
 
 def interpolate_data(df, resolution=1000):
     phi = np.radians(df['Phi'])
@@ -169,37 +162,52 @@ def interpolate_data(df, resolution=1000):
 
     return phi_grid, theta_grid, intensity_grid
 
-def plot_polar_interpolated(df, resolution=500):
+
+def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=None, save_path=None):
+    # Interpolar os dados
     plt.ion()
     phi_grid, theta_grid, intensity_grid = interpolate_data(df, resolution)
 
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(10, 8), dpi=100)
+    # Criando o gráfico polar
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(10, 8), dpi=150)
+
+    # Plotando a intensidade interpolada
     c = ax.pcolormesh(phi_grid, theta_grid, intensity_grid, shading='gouraud', cmap='afmhot')
 
-    max_theta = df['Theta'].max()
-    ax.set_ylim(0, np.radians(max_theta))
+    # Definir o limite máximo do eixo theta com base no maior valor de theta nos dados
+    max_theta = df['Theta'].max()  # Maior valor de theta presente nos dados
+    ax.set_ylim(0, np.radians(max_theta))  # Limitar o eixo radial até o maior valor de theta
 
-    theta_ticks = np.linspace(0, max_theta, num=6)
-    ax.set_yticks(np.radians(theta_ticks))
-    ax.set_yticklabels([f'{int(tick)}°' for tick in theta_ticks])
+    # Adiciona rótulos para os ângulos theta, ajustados conforme o máximo de theta nos dados
+    theta_ticks = np.linspace(0, max_theta, num=6)  # Definir até 6 ticks no eixo theta
+    ax.set_yticks(np.radians(theta_ticks))  # Converte para radianos
+    ax.set_yticklabels([f'{int(tick)}°' for tick in theta_ticks])  # Exibe como graus
 
-    ax.set_xlabel('θ', fontsize=36)
-    ax.set_ylabel('φ', fontsize=36, labelpad=1, rotation=360)
-    ax.yaxis.set_label_coords(0.8, 0.93)
+    # Adicionando a barra de cores
+    cbar = fig.colorbar(c, ax=ax, label=r'$\chi = \frac{I_{\text{exp}} - I_0}{I_0}$')
+    cbar.set_label(r'$\chi(θ,φ) = \frac{I(θ,φ) - I_0(θ,φ)}{I_0(θ,φ)}$', fontsize=22)
 
-    cbar = fig.colorbar(c, ax=ax, label=r'$I_{\text{cal}}$')
-    cbar.set_label(r'$I_{\text{cal}}$', fontsize=36)
+    # Adiciona a variável fora do gráfico, no canto inferior direito
+    if my_variable is not None:
+        # Aqui estamos usando coordenadas relativas à figura (0 a 1)
+        fig.text(0.75, 0.07, f'R-factor: {my_variable}', fontsize=22, color='black', ha='right', va='bottom',
+                 fontweight='bold')
 
-    plt.xticks(fontsize=12)
-    plt.yticks(fontsize=16)
-    plt.show()
+    plt.xticks(fontsize=11, fontweight='bold')
+    plt.yticks(fontsize=0, fontweight='bold')
+    plt.draw()
+
+    # Salvar a figura, se o caminho de salvamento for fornecido
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')  # Salva no caminho especificado
+
+    # Exibir a figura por 600 segundos
     plt.pause(600)
 
 
 # Caminho do arquivo
-file_path = 'bestFCC.out'
-
-df = process_file(file_path)
-
-plot_polar_interpolated(df)
-
+file_path = 'bestBCC.out'
+save_path = 'grafico_polar.png'
+df, r_factor_total = process_file(file_path)
+my_variable = "{:.3f}".format(r_factor_total)
+plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=my_variable, save_path=save_path)
