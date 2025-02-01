@@ -1,19 +1,19 @@
 # Parâmetros fornecidos
-file_prefix = 'MA02_-'
-thetai = 9
-thetaf = 78
+file_prefix = 'OU18_-'
+thetai = 18
+thetaf = 69
 dtheta = 3
 phii = 3
-phif = 123
+phif = 180
 dphi = 3
-channel = 372.00003
+channel = 461.79996
 symmetry = 1
 indice_de_plotagem = 0
 shirley_tempo = 1
 poli_tempo = 0.5
 fft_tempo = 0.5
 arquivo_saida = "exp.txt"
-rotate_angle = 17
+rotate_angle = 127.3
 
 def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry):
     """
@@ -54,7 +54,8 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
 
         # Salvar a curva simetrizada
         intensity_symmetric[i, :] = f_symmetric
-        plt.ion()
+        save_dir = "FFT"
+        os.makedirs(save_dir, exist_ok=True)
         # Plotar as curvas original e simetrizada (opcional)
         plt.figure()
         plt.plot(phi_values, f, label='Experimental', linestyle='--')
@@ -64,10 +65,13 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
         plt.ylabel('Intensity')
         plt.legend()
 
-        plt.show()
-        plt.pause(fft_tempo)
-
+        filename = f"FFT{theta}.jpg"
+        filepath = os.path.join(save_dir, filename)
+        # Salvar a figura
+        plt.savefig(filepath, dpi=100, bbox_inches='tight')
         plt.close()
+
+
 
 
     return intensity_symmetric
@@ -144,8 +148,8 @@ from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter1d
 import matplotlib
-matplotlib.use('TkAgg')
-plt.ion()
+matplotlib.use('Agg')
+
 output_file_path = 'simetrizados.txt'  # não mexa nesse arquivo
 # Função para gerar os nomes dos arquivos esperados
 
@@ -302,7 +306,7 @@ def process_file(file_name, output_file):
             plt.close()
 
         if indice_de_plotagem == 1:
-            plt.ion()
+            #plt.ion()
             save_dir = "XPS_Shirley"
             os.makedirs(save_dir, exist_ok=True)
             title = f"X-ray Photoelectron Spectrocopy: (θ={theta_values}, φ={phi_values})"
@@ -317,13 +321,14 @@ def process_file(file_name, output_file):
             plt.legend()
             plt.grid(True)
             #Nome do arquivo (usando os valores de θ e φ para identificação)
-            filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.png"
+            filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.jpg"
             filepath = os.path.join(save_dir, filename)
             # Salvar a figura
-            plt.savefig(filepath, dpi=300, bbox_inches='tight')
-            plt.show()
-            plt.pause(shirley_tempo)
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
             plt.close()
+            #plt.show()
+            #plt.pause(shirley_tempo)
+
         return list(zip(y_corrected_smoothed, x_values)), total_area
 
     with open(file_name, 'r') as file:
@@ -438,7 +443,8 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             # Criando valores de phi de acordo com o intervalo definido
             phi_fine = np.arange(phii, phif + dphi, dphi)  # Usando phi_values
             intensity_fitted = polynomial_3(phi_fine, *popt)
-            plt.ion()
+            save_dir = "PoliThird"
+            os.makedirs(save_dir, exist_ok=True)
             # Plotando os dados e o ajuste
             plt.figure(figsize=(8, 6))
             plt.plot(phi, intensity, linestyle='-', color='blue', alpha=0.5, label="Experimental")
@@ -448,8 +454,10 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             plt.ylabel("Intensity")
             plt.legend()
             plt.grid()
-            plt.show()
-            plt.pause(poli_tempo)
+            filename = f"PoliCurve{theta}.jpg"
+            filepath = os.path.join(save_dir, filename)
+            # Salvar a figura
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
             plt.close()
 
 
@@ -532,7 +540,7 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
                 Chi3 = ((intensity-mean_intensity2) / mean_intensity2)
 
             # Escreve cada valor de phi_fine, intensity_fitted, mean_intensity e Chi em uma linha separada
-            for p, i, chi in zip(phi, intensity, Chi):
+            for p, i, chi in zip(phi, intensity,Chi ):
                 file.write(f"      {p:.5f}      {i:.1f}      {mean_intensity:.1f}      {chi:.7f}\n")
             file.write("")  # Linha em branco para separar os blocos de dados
 
@@ -712,6 +720,17 @@ def process_file(file_path):
 
         df = pd.concat([df, df_0_120, df_240_360]).reset_index(drop=True)
 
+    if phi_interval == 177:
+        first_values = df.groupby('Theta').first().reset_index()
+        df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
+        last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
+        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
+        df = pd.concat([df, last_values], ignore_index=True)
+
+        df_0_180 = df.copy()
+        df_0_180['Phi'] = 183 + df_0_180['Phi']
+        df = pd.concat([df, df_0_180]).reset_index(drop=True)
+
     return df
 
 # Função para interpolar os dados
@@ -729,7 +748,7 @@ def interpolate_data(df, resolution=1000):
     phi_grid, theta_grid = np.meshgrid(phi_grid, theta_grid)
 
     # Realizar a interpolação
-    intensity_grid = griddata((phi, theta), intensity, (phi_grid, theta_grid), method='linear')
+    intensity_grid = griddata((phi, theta), intensity, (phi_grid, theta_grid), method='cubic')
 
     return phi_grid, theta_grid, intensity_grid
 
@@ -737,7 +756,8 @@ def interpolate_data(df, resolution=1000):
 # Função para gerar o gráfico polar
 def plot_polar_interpolated(df, resolution=500):
     # Interpolar os dados
-    plt.ion()
+    save_dir = "XPDPattern"
+    os.makedirs(save_dir, exist_ok=True)
     phi_grid, theta_grid, intensity_grid = interpolate_data(df, resolution)
     # Criando o gráfico polar
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(10,8), dpi=100)
@@ -766,8 +786,10 @@ def plot_polar_interpolated(df, resolution=500):
 
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=16)
-    plt.draw()
-    plt.pause(600)
+    filename = f"XPD.jpg"
+    filepath = os.path.join(save_dir, filename)
+    # Salvar a figura
+    plt.savefig(filepath, dpi=100, bbox_inches='tight')
     plt.close()
 
 def rotate_phi(df, rotation_angle):
