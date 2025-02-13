@@ -1,0 +1,15 @@
+file_prefix = JL24_- #Coloque o prefixo do arquivo
+thetai = 12   #Coloque o theta inicial
+thetaf = 69  #Coloque o theta final
+dtheta = 3  #Coloque a etapa do theta
+phii = 0  #Phi inicial
+phif = 357 #Phi final
+dphi = 3 #Etapa do phi
+channel = 1123.99988 #Valor de energia final para escolher o elemento, consulto seus arquivos
+symmetry = 2 # Coloque em 1 caso queira utilizar seus dados originais, 2 para realizar a simetrização.
+indice_de_plotagem = 0 # Deixa em 0 para não plotar a convergência do Shirley, 1 para visualizar e salvar as imagens, 2 para visualizar o fitting com gaussianas , 3 fitting com doniach
+shirley_tempo = 1 #tempo entre as plotagem do Shirley em Segundos
+poli_tempo = 0.1 #tempo entre as plotagens do calculo da curva I0
+fft_tempo = 0.1 #tempo entre a plotagem da simetrização
+arquivo_saida = exp20.txt #nome do arquivo experimental
+rotate_angle = 0 #ângulo de rotação
