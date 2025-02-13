@@ -1,19 +1,43 @@
-# Parâmetros fornecidos
-file_prefix = 'OU18_-'
-thetai = 18
-thetaf = 69
-dtheta = 3
-phii = 3
-phif = 180
-dphi = 3
-channel = 461.79996
-symmetry = 1
-indice_de_plotagem = 0
-shirley_tempo = 1
-poli_tempo = 0.5
-fft_tempo = 0.5
-arquivo_saida = "exp.txt"
-rotate_angle = 127.3
+def carregar_config(arquivo):
+    parametros = {}
+    with open(arquivo, 'r') as f:
+        for linha in f:
+            # Remove comentários (tudo após #)
+            linha = linha.split('#', 1)[0].strip()
+            if '=' in linha and linha:  # Garante que a linha não está vazia
+                chave, valor = linha.split('=', 1)
+                chave = chave.strip()
+                valor = valor.strip()
+                try:
+                    # Tenta converter para número (int ou float)
+                    if '.' in valor:
+                        parametros[chave] = float(valor)
+                    else:
+                        parametros[chave] = int(valor)
+                except ValueError:
+                    # Se não for número, mantém como string
+                    parametros[chave] = valor
+    return parametros
+
+# Ler parâmetros do arquivo config.txt
+parametros = carregar_config('config.txt')
+
+# Acessando os parâmetros no código
+file_prefix = parametros["file_prefix"]
+thetai = parametros["thetai"]
+thetaf = parametros["thetaf"]
+dtheta = parametros["dtheta"]
+phii = parametros["phii"]
+phif = parametros["phif"]
+dphi = parametros["dphi"]
+channel = parametros["channel"]
+symmetry = parametros["symmetry"]
+indice_de_plotagem = parametros["indice_de_plotagem"]
+shirley_tempo = parametros["shirley_tempo"]
+poli_tempo = parametros["poli_tempo"]
+fft_tempo = parametros["fft_tempo"]
+arquivo_saida = parametros["arquivo_saida"]
+rotate_angle = parametros["rotate_angle"]
 
 def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry):
     """
@@ -54,8 +78,7 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
 
         # Salvar a curva simetrizada
         intensity_symmetric[i, :] = f_symmetric
-        save_dir = "FFT"
-        os.makedirs(save_dir, exist_ok=True)
+        plt.ion()
         # Plotar as curvas original e simetrizada (opcional)
         plt.figure()
         plt.plot(phi_values, f, label='Experimental', linestyle='--')
@@ -65,13 +88,10 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
         plt.ylabel('Intensity')
         plt.legend()
 
-        filename = f"FFT{theta}.jpg"
-        filepath = os.path.join(save_dir, filename)
-        # Salvar a figura
-        plt.savefig(filepath, dpi=100, bbox_inches='tight')
+        plt.show()
+        plt.pause(fft_tempo)
+
         plt.close()
-
-
 
 
     return intensity_symmetric
@@ -148,9 +168,9 @@ from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter1d
 import matplotlib
-matplotlib.use('Agg')
-
-output_file_path = 'simetrizados.txt'  # não mexa nesse arquivo
+matplotlib.use('TkAgg')
+plt.ion()
+output_file_path = '../simetrizados.txt'  # não mexa nesse arquivo
 # Função para gerar os nomes dos arquivos esperados
 
 # Gerar os nomes de arquivos esperados
@@ -161,7 +181,7 @@ existing_files = [f for f in expected_files if os.path.isfile(f)]
 
 # Listas para armazenar os dados separados
 data_one_column = []
-output_file_xps = "saidaxps.txt"
+output_file_xps = "../saidaxps.txt"
 
 with open(output_file_xps, 'w') as log_file:
     for file in existing_files:
@@ -306,7 +326,7 @@ def process_file(file_name, output_file):
             plt.close()
 
         if indice_de_plotagem == 1:
-            #plt.ion()
+            plt.ion()
             save_dir = "XPS_Shirley"
             os.makedirs(save_dir, exist_ok=True)
             title = f"X-ray Photoelectron Spectrocopy: (θ={theta_values}, φ={phi_values})"
@@ -321,14 +341,13 @@ def process_file(file_name, output_file):
             plt.legend()
             plt.grid(True)
             #Nome do arquivo (usando os valores de θ e φ para identificação)
-            filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.jpg"
+            filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.png"
             filepath = os.path.join(save_dir, filename)
             # Salvar a figura
-            plt.savefig(filepath, dpi=100, bbox_inches='tight')
+            plt.savefig(filepath, dpi=300, bbox_inches='tight')
+            plt.show()
+            plt.pause(shirley_tempo)
             plt.close()
-            #plt.show()
-            #plt.pause(shirley_tempo)
-
         return list(zip(y_corrected_smoothed, x_values)), total_area
 
     with open(file_name, 'r') as file:
@@ -370,8 +389,8 @@ def process_file(file_name, output_file):
 
 
 # Arquivos de entrada e saída
-file_name = "saidaxps.txt"
-output_file = "saidashirley.txt"
+file_name = "../saidaxps.txt"
+output_file = "../saidashirley.txt"
 
 # Processa o arquivo
 process_file(file_name, output_file)
@@ -408,10 +427,10 @@ def process_file_2(output_file):
     return df
 
 # Processa o arquivo e salva os resultados em um DataFrame
-df = process_file_2("saidashirley.txt")
+df = process_file_2("../saidashirley.txt")
 
 # Salva o DataFrame em um arquivo .txt
-output_txt_file = "saidatpintensity.txt"
+output_txt_file = "../saidatpintensity.txt"
 
 with open(output_txt_file, 'w') as f:
     f.write(df.to_string(index=False))  # Salva os dados sem o índice
@@ -443,8 +462,7 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             # Criando valores de phi de acordo com o intervalo definido
             phi_fine = np.arange(phii, phif + dphi, dphi)  # Usando phi_values
             intensity_fitted = polynomial_3(phi_fine, *popt)
-            save_dir = "PoliThird"
-            os.makedirs(save_dir, exist_ok=True)
+            plt.ion()
             # Plotando os dados e o ajuste
             plt.figure(figsize=(8, 6))
             plt.plot(phi, intensity, linestyle='-', color='blue', alpha=0.5, label="Experimental")
@@ -454,10 +472,8 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             plt.ylabel("Intensity")
             plt.legend()
             plt.grid()
-            filename = f"PoliCurve{theta}.jpg"
-            filepath = os.path.join(save_dir, filename)
-            # Salvar a figura
-            plt.savefig(filepath, dpi=100, bbox_inches='tight')
+            plt.show()
+            plt.pause(poli_tempo)
             plt.close()
 
 
@@ -540,15 +556,15 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
                 Chi3 = ((intensity-mean_intensity2) / mean_intensity2)
 
             # Escreve cada valor de phi_fine, intensity_fitted, mean_intensity e Chi em uma linha separada
-            for p, i, chi in zip(phi, intensity,Chi ):
+            for p, i, chi in zip(phi, intensity, Chi):
                 file.write(f"      {p:.5f}      {i:.1f}      {mean_intensity:.1f}      {chi:.7f}\n")
             file.write("")  # Linha em branco para separar os blocos de dados
 
 
 # Arquivos de entrada e saída
-input_file = "saidatpintensity.txt"  # Substitua pelo nome do seu arquivo
-output_file = "coeficientes_ajustados.txt"
-plot_dir = "plots"
+input_file = "../saidatpintensity.txt"  # Substitua pelo nome do seu arquivo
+output_file = "../coeficientes_ajustados.txt"
+plot_dir = "../plots"
 
 os.makedirs(plot_dir, exist_ok=True)
 
@@ -639,7 +655,7 @@ def save_to_text_file(data_df, intensity_symmetric, output_file_path):
                 file.write("")  # Linha em branco para separar os blocos de dados
 
 # Leitura dos dados
-file_path = 'coeficientes_ajustados.txt'  # Substitua pelo caminho do arquivo
+file_path = '../coeficientes_ajustados.txt'  # Substitua pelo caminho do arquivo
 
 data_df = process_file(file_path)
 
@@ -692,14 +708,118 @@ def process_file(file_path):
                 data.append([phi, col1, col2, theta_value, intensity, True])  # Marcar como original
 
     df = pd.DataFrame(data, columns=['Phi', 'Col1', 'Col2', 'Theta', 'Intensity', 'IsOriginal'])
+    ####################################################################################################################
+    df_plot = df.copy()
+
+    def rotate_phi_for_plot(df_plot, rotation_angle):
+        """
+        Mesma rotação, mas garante que Phi = 0 esteja presente **apenas** para plotagem.
+        """
+        df_plot = df.copy()
+        df_plot['Phi'] = (df_plot['Phi'] + rotation_angle) % 360
+
+        if not np.isclose(df_plot['Phi'].min(), 0):
+            df_0 = df_plot[df_plot['Phi'] == df_plot['Phi'].min()].copy()
+            df_0['Phi'] = 0
+            df_plot = pd.concat([df_plot, df_0], ignore_index=True)
+
+        return df_plot
+    df_plot = rotate_phi_for_plot(df_plot, rotate_angle)
     # Verificar o intervalo de Phi
+    phi_min2 = df_plot['Phi'].min()
+    phi_max2 = df_plot['Phi'].max()
+    phi_interval2 = phi_max2 - phi_min2
+
+    if phi_interval2 < 360:
+        # Encontrar o menor valor de Phi e garantir que ele esteja no intervalo correto
+        phi_min2 = df_plot['Phi'].min()
+
+        # Pegar as linhas que têm Phi próximo de phi_min
+        df_360 = df_plot[np.isclose(df_plot['Phi'], phi_min2)].copy()
+        df_360['Phi'] = 360  # Ajustar para 360°
+
+        df_plot = pd.concat([df_plot, df_360], ignore_index=True)
+
+
+    if phi_interval2 == 120:
+        # Replicação dos dados para cobrir 360 graus
+        first_values = df_plot.groupby('Theta').first().reset_index()
+        df_plot = df_plot.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
+        last_values = df_plot.groupby('Theta').last().reset_index()  # Pegar os últimos valores
+        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
+        # Adicionar os novos valores ao DataFrame
+        df_plot = pd.concat([df_plot, last_values], ignore_index=True)
+
+        df_0_120 = df_plot.copy()
+        df_0_120['Phi'] = 120 + df_0_120['Phi']
+        df_0_120['isOriginal'] = False
+
+        df_240_360 = df_plot.copy()
+        df_240_360['Phi'] = 240 + df_240_360['Phi']
+
+        df_plot = pd.concat([df_plot, df_0_120, df_240_360]).reset_index(drop=True)
+
+    if phi_interval2 == 90:
+        # Replicação dos dados para cobrir 360 graus
+        first_values = df_plot.groupby('Theta').first().reset_index()
+        df_plot = df_plot.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
+        last_values = df_plot.groupby('Theta').last().reset_index()  # Pegar os últimos valores
+        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
+
+        # Adicionar os novos valores ao DataFrame
+        df_plot = pd.concat([df_plot, last_values], ignore_index=True)
+        df_0_90 = df_plot.copy()
+        df_0_90['Phi'] = 90 + df_0_90['Phi']
+
+        df_90_180 = df_plot.copy()
+        df_90_180['Phi'] = 180 + df_90_180['Phi']
+
+        df_180_270 = pd.concat([df_plot,df_0_90]).reset_index(drop=True)
+        df_180_270['Phi'] = 180 + df_180_270['Phi']
+
+        df_plot = pd.concat([df_plot, df_0_90, df_180_270]).reset_index(drop=True)
+
+    if phi_interval2 == 177:
+        first_values = df_plot.groupby('Theta').first().reset_index()
+        df_plot = df_plot.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
+        last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
+        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
+        df_plot = pd.concat([df_plot, last_values], ignore_index=True)
+
+        df_0_180 = df_plot.copy()
+        df_0_180['Phi'] = 180 + df_0_180['Phi']
+        df_plot = pd.concat([df_plot, df_0_180]).reset_index(drop=True)
+
+    ####################################################################################################################
+    def rotate_phi(df, rotation_angle):
+        """
+        Rotaciona os valores de Phi no DataFrame garantindo que permaneçam no intervalo [0, 360).
+
+        Parâmetros:
+        - df (pd.DataFrame): DataFrame com a coluna 'Phi'.
+        - rotation_angle (float): Ângulo de rotação em graus.
+
+        Retorna:
+        - pd.DataFrame: DataFrame com Phi rotacionado.
+        """
+        df['Phi'] = (df['Phi'] + rotation_angle) % 360
+        return df
+        # Verificar o intervalo de Phi
+
+    df = rotate_phi(df, rotate_angle)
+
     phi_min = df['Phi'].min()
     phi_max = df['Phi'].max()
     phi_interval = phi_max - phi_min
 
-    if phi_interval < 360 and df['Phi'].max() < 360:
-        df_360 = df[df['Phi'] == 0].copy()
-        df_360['Phi'] = 360
+    if phi_interval < 360:
+        # Encontrar o menor valor de Phi e garantir que ele esteja no intervalo correto
+        phi_min = df['Phi'].min()
+
+        # Pegar as linhas que têm Phi próximo de phi_min
+        df_360 = df[np.isclose(df['Phi'], phi_min)].copy()
+        df_360['Phi'] = 360  # Ajustar para 360°
+
         df = pd.concat([df, df_360], ignore_index=True)
 
     if phi_interval == 120:
@@ -720,6 +840,26 @@ def process_file(file_path):
 
         df = pd.concat([df, df_0_120, df_240_360]).reset_index(drop=True)
 
+    if phi_interval == 90:
+        # Replicação dos dados para cobrir 360 graus
+        first_values = df.groupby('Theta').first().reset_index()
+        df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
+        last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
+        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
+
+        # Adicionar os novos valores ao DataFrame
+        df = pd.concat([df, last_values], ignore_index=True)
+        df_0_90 = df.copy()
+        df_0_90['Phi'] = 90 + df_0_90['Phi']
+
+        df_90_180 = df.copy()
+        df_90_180['Phi'] = 180 + df_90_180['Phi']
+
+        df_180_270 = pd.concat([df,df_0_90]).reset_index(drop=True)
+        df_180_270['Phi'] = 180 + df_180_270['Phi']
+
+        df = pd.concat([df, df_0_90, df_180_270]).reset_index(drop=True)
+
     if phi_interval == 177:
         first_values = df.groupby('Theta').first().reset_index()
         df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
@@ -728,10 +868,10 @@ def process_file(file_path):
         df = pd.concat([df, last_values], ignore_index=True)
 
         df_0_180 = df.copy()
-        df_0_180['Phi'] = 183 + df_0_180['Phi']
+        df_0_180['Phi'] = 180 + df_0_180['Phi']
         df = pd.concat([df, df_0_180]).reset_index(drop=True)
 
-    return df
+    return df, df_plot
 
 # Função para interpolar os dados
 def interpolate_data(df, resolution=1000):
@@ -756,8 +896,7 @@ def interpolate_data(df, resolution=1000):
 # Função para gerar o gráfico polar
 def plot_polar_interpolated(df, resolution=500):
     # Interpolar os dados
-    save_dir = "XPDPattern"
-    os.makedirs(save_dir, exist_ok=True)
+    plt.ion()
     phi_grid, theta_grid, intensity_grid = interpolate_data(df, resolution)
     # Criando o gráfico polar
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(10,8), dpi=100)
@@ -776,39 +915,26 @@ def plot_polar_interpolated(df, resolution=500):
     ax.set_yticklabels([f'{int(tick)}°' for tick in theta_ticks],)  # Exibe como graus
 
 
-    ax.set_xlabel('θ', fontsize=36)
-    ax.set_ylabel('φ', fontsize=36, labelpad=1, rotation = 360)
+    ax.set_xlabel('', fontsize=36)
+    ax.set_ylabel('', fontsize=36, labelpad=1, rotation = 360)
     ax.yaxis.set_label_coords(0.8, 0.93)  # Ajustar a posição do rótulo 'φ'
 
     # Adicionando a barra de cores
-    cbar = fig.colorbar(c, ax=ax, label=r'$\chi = \frac{I_{\text{exp}} - I_0}{I_0}$')
-    cbar.set_label(r'$\chi = \frac{I_{\text{exp}} - I_0}{I_0}$', fontsize=36)
+    cbar = fig.colorbar(c, ax=ax, label=r'')
+    cbar.set_label(r'', fontsize=36)
 
-    plt.xticks(fontsize=12)
-    plt.yticks(fontsize=16)
-    filename = f"XPD.jpg"
-    filepath = os.path.join(save_dir, filename)
-    # Salvar a figura
-    plt.savefig(filepath, dpi=100, bbox_inches='tight')
+    plt.xticks(fontsize=11)
+    plt.yticks(fontsize=0)
+    plt.draw()
+    plt.pause(600)
     plt.close()
-
-def rotate_phi(df, rotation_angle):
-    """
-    Rotaciona os valores de Phi no DataFrame.
-
-    Parâmetros:
-    - df (pd.DataFrame): DataFrame com a coluna 'Phi'.
-    - rotation_angle (float): Ângulo de rotação em graus.
-
-    Retorna:
-    - pd.DataFrame: DataFrame com Phi rotacionado.
-    """
-    df['Phi'] += rotation_angle
-    return df
 
 
 # Caminho do arquivo de dados
-file_path = 'simetrizados.txt'
+file_path = '../simetrizados.txt'
+
+
+
 
 
 def save_to_txt_with_blocks(df, file_name):
@@ -862,10 +988,10 @@ def save_to_txt_with_blocks(df, file_name):
 
 
 # Processar os dados
-df = process_file(file_path)
+df, df_plot = process_file(file_path)
 
-df = rotate_phi(df, rotate_angle)
+
+plot_polar_interpolated(df_plot)
 
 save_to_txt_with_blocks(df, arquivo_saida)
 
-plot_polar_interpolated(df)
