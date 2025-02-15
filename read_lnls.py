@@ -78,7 +78,8 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
 
         # Salvar a curva simetrizada
         intensity_symmetric[i, :] = f_symmetric
-        plt.ion()
+        save_dir = "FFT"
+        os.makedirs(save_dir, exist_ok=True)
         # Plotar as curvas original e simetrizada (opcional)
         plt.figure()
         plt.plot(phi_values, f, label='Experimental', linestyle='--')
@@ -88,10 +89,13 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
         plt.ylabel('Intensity')
         plt.legend()
 
-        plt.show()
-        plt.pause(fft_tempo)
-
+        filename = f"FFT{theta}.jpg"
+        filepath = os.path.join(save_dir, filename)
+        # Salvar a figura
+        plt.savefig(filepath, dpi=100, bbox_inches='tight')
         plt.close()
+
+
 
 
     return intensity_symmetric
@@ -249,6 +253,7 @@ def process_file(file_name, output_file):
         fitted_double_doniach = fitted_double_gaussian = np.zeros_like(x_values)
 
         # Ajuste Doniach-Sunjic apenas se indice_de_plotagem == 1
+
         if indice_de_plotagem == 3:
             initial_guess_doniach = [210000, 15, 1, 0.1, 10000, 31, 1, 0.1]
             bounds_doniach = ([200000, 10, 0.5, 0, 5000, 30, 0.5, 0], [300000, 20, 8, 2, 50000, 32, 4, 2])
@@ -326,7 +331,7 @@ def process_file(file_name, output_file):
             plt.close()
 
         if indice_de_plotagem == 1:
-            plt.ion()
+            #plt.ion()
             save_dir = "XPS_Shirley"
             os.makedirs(save_dir, exist_ok=True)
             title = f"X-ray Photoelectron Spectrocopy: (θ={theta_values}, φ={phi_values})"
@@ -341,13 +346,14 @@ def process_file(file_name, output_file):
             plt.legend()
             plt.grid(True)
             #Nome do arquivo (usando os valores de θ e φ para identificação)
-            filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.png"
+            filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.jpg"
             filepath = os.path.join(save_dir, filename)
             # Salvar a figura
-            plt.savefig(filepath, dpi=300, bbox_inches='tight')
-            plt.show()
-            plt.pause(shirley_tempo)
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
             plt.close()
+            #plt.show()
+            #plt.pause(shirley_tempo)
+
         return list(zip(y_corrected_smoothed, x_values)), total_area
 
     with open(file_name, 'r') as file:
@@ -462,7 +468,8 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             # Criando valores de phi de acordo com o intervalo definido
             phi_fine = np.arange(phii, phif + dphi, dphi)  # Usando phi_values
             intensity_fitted = polynomial_3(phi_fine, *popt)
-            plt.ion()
+            save_dir = "PoliThird"
+            os.makedirs(save_dir, exist_ok=True)
             # Plotando os dados e o ajuste
             plt.figure(figsize=(8, 6))
             plt.plot(phi, intensity, linestyle='-', color='blue', alpha=0.5, label="Experimental")
@@ -472,8 +479,10 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             plt.ylabel("Intensity")
             plt.legend()
             plt.grid()
-            plt.show()
-            plt.pause(poli_tempo)
+            filename = f"PoliCurve{theta}.jpg"
+            filepath = os.path.join(save_dir, filename)
+            # Salvar a figura
+            plt.savefig(filepath, dpi=100, bbox_inches='tight')
             plt.close()
 
 
@@ -946,27 +955,28 @@ def save_to_txt_with_blocks(df, file_name):
     df_original = df[df['IsOriginal']]
 
     num_theta = df_original['Theta'].nunique()
-    num_phi = df_original['Phi'].nunique()
-    num_points = len(df_original)
+    num_phi = df_original['Phi'].nunique() - 1
+    num_points = num_theta*num_phi
 
     with open(file_name, 'w') as file:
         # Cabeçalho inicial
-        file.write(f"      {num_theta}    {num_points}    0     datakind beginning-row linenumbers\n")
+        file.write(f"   323    17    0     datakind beginning-row linenumbers\n")
+        file.write(f"--------------------------------------------------------------\n")
         file.write(f"MSCD Version 1.00 Yufeng Chen and Michel A Van Hove\n")
         file.write(f"Lawrence Berkeley National Laboratory (LBNL), Berkeley, CA 94720\n")
         file.write(f"Copyright (c) Van Hove Group 1997. All rights reserved\n")
         file.write(f"--------------------------------------------------------------\n")
-        file.write(f"angle-resolved photoemission extended fine structure (ARPEFS)\n")
-        file.write(f"experimental data for Fe 2p3/2 from Fe on STO(100)  excited with hv=1810eV\n")
+        file.write(f" angle-resolved photoemission extended fine structure (ARPEFS)\n")
+        file.write(f" experimental data for Pd 3d3/2 from W(100)  excited with hv=1810eV\n")
         file.write("\n")
-        file.write(f"provided by Pancotti et al. (LNLS in 9, June 2010)\n")
-        file.write(f"   initial angular momentum (l) = 1\n")
-        file.write(f"   photon polarization angle (polar, azimuth) = (  30.0,   0.0 ) (deg)\n")
+        file.write(f" provided by Pancotti et al. (LNLS in 12, June 2007)\n")
+        file.write(f"   intial angular momentum (l) = 2\n")
+        file.write(f"   photon polarization angle (polar,azimuth) = (  30.0,   0.0 ) (deg)\n")
         file.write(f"   sample temperature = 300 K\n")
         file.write("\n")
         file.write(f"   photoemission angular scan curves\n")
         file.write(f"     (curve point theta phi weightc weighte//k intensity chiexp)\n")
-        file.write(f"      {num_theta}     {num_points}       1       {num_theta}     {num_phi}     {num_points}\n")
+        file.write(f"      {num_theta}    {num_points}       1      {num_theta}     {num_phi}    {num_points}\n")
 
         # Número do bloco de θ
         number_of_theta = 0
@@ -977,14 +987,17 @@ def save_to_txt_with_blocks(df, file_name):
             first_intensity = subset.iloc[0]['Intensity']
             last_intensity = subset.iloc[-1]['Intensity']
             file.write(
-                f"       {number_of_theta}     {num_phi}       19.5900     {theta:.4f}      1.00000      0.00000\n")
+                f"       {number_of_theta}     {num_phi}      9.85000      {theta}      1.00000      0.00000\n")
 
             for i, row in enumerate(subset.itertuples(index=False)):
                 if not (i == len(subset) - 1 and row.Intensity == first_intensity):
-                    file.write(
-                        f"      {row.Phi:.4f}      {row.Col1:.2f}      {row.Col2:.2f}      {row.Intensity:.7f}\n")
-
-            file.write("\n")  # Linha em branco para separar os blocos
+                    if row.Phi < 10:
+                        phi_format = f"{row.Phi:7.5f}"  # Exemplo: " 0.12345"
+                    elif row.Phi < 100:
+                        phi_format = f"{row.Phi:7.4f}"  # Exemplo: "12.3456"
+                    else:
+                        phi_format = f"{row.Phi:7.3f}"  # Exemplo: "123.456"
+                    file.write(f"      {phi_format}      {row.Col1:1.0f}.      {row.Col2:1.0f}.   {row.Intensity: 10.7f}\n")
 
 
 # Processar os dados
