@@ -958,10 +958,10 @@ def save_to_txt_with_blocks(df, file_name):
     num_phi = df_original['Phi'].nunique() - 1
     num_points = num_theta*num_phi
 
-    with open(file_name, 'w') as file:
+    with open(file_name, 'w',newline="\n") as file:
         # Cabeçalho inicial
         file.write(f"   323    17    0     datakind beginning-row linenumbers\n")
-        file.write(f"--------------------------------------------------------------\n")
+        file.write(f"----------------------------------------------------------------\n")
         file.write(f"MSCD Version 1.00 Yufeng Chen and Michel A Van Hove\n")
         file.write(f"Lawrence Berkeley National Laboratory (LBNL), Berkeley, CA 94720\n")
         file.write(f"Copyright (c) Van Hove Group 1997. All rights reserved\n")
@@ -986,8 +986,12 @@ def save_to_txt_with_blocks(df, file_name):
             subset = df_original[df_original['Theta'] == theta].sort_values(by='Phi')
             first_intensity = subset.iloc[0]['Intensity']
             last_intensity = subset.iloc[-1]['Intensity']
+            if number_of_theta < 10:
+                theta_format = f"       {number_of_theta}"
+            else:
+                theta_format = f"      {number_of_theta}"
             file.write(
-                f"       {number_of_theta}     {num_phi}      9.85000      {theta}      1.00000      0.00000\n")
+                f"{theta_format}     {num_phi}      9.85000      {theta:1.0f}      1.00000      0.00000\n")
 
             for i, row in enumerate(subset.itertuples(index=False)):
                 if not (i == len(subset) - 1 and row.Intensity == first_intensity):
@@ -997,7 +1001,15 @@ def save_to_txt_with_blocks(df, file_name):
                         phi_format = f"{row.Phi:7.4f}"  # Exemplo: "12.3456"
                     else:
                         phi_format = f"{row.Phi:7.3f}"  # Exemplo: "123.456"
-                    file.write(f"      {phi_format}      {row.Col1:1.0f}.      {row.Col2:1.0f}.   {row.Intensity: 10.7f}\n")
+                    if row.Col1 < 100000:  # Menos de 100000
+                        col1_format = f"{row.Col1:1.1f}"  # Exemplo: " 98755.2"
+                    else:  # Acima de 100000
+                        col1_format = f"{row.Col1:1.0f}."  # Exemplo: "100697.0" (com ponto
+                    if row.Col2 < 100000:  # Menos de 100000
+                        col2_format = f"{row.Col2:1.1f}"  # Exemplo: " 98755.2"
+                    else:  # Acima de 100000
+                        col2_format = f"{row.Col2:1.0f}."  # Exemplo: "100697.0" (com ponto
+                    file.write(f"      {phi_format}      {col1_format}      {col2_format}   {row.Intensity: 10.7f}\n")
 
 
 # Processar os dados
