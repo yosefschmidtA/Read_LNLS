@@ -169,7 +169,6 @@ def interpolate_data(df, resolution=1000):
 
     return phi_grid, theta_grid, intensity_grid
 
-
 def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=None, save_path=None):
     # Interpolar os dados
     plt.ion()
@@ -191,30 +190,47 @@ def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=N
     ax.set_yticklabels([f'{int(tick)}°' for tick in theta_ticks])  # Exibe como graus
 
     # Adicionando a barra de cores
-    cbar = fig.colorbar(c, ax=ax, label='')
-    cbar.set_label('', fontsize=22)
-
+    cbar = fig.colorbar(c, ax=ax, label='', pad=0.08)
+    cbar.set_label('', fontsize=22, fontweight='bold')
+    cbar.ax.yaxis.set_tick_params(labelsize=30)  # Ajusta o tamanho da fonte
+    for label in cbar.ax.get_yticklabels():
+        label.set_fontweight('bold')  # Deixa os valores em negrito
     # Adiciona a variável fora do gráfico, no canto inferior direito
     if my_variable is not None:
         # Aqui estamos usando coordenadas relativas à figura (0 a 1)
-        fig.text(0.75, 0.07, f'R-factor: {my_variable}', fontsize=22, color='black', ha='right', va='bottom',
+        fig.text(0.87, 0.03, f'R-factor: {my_variable}', fontsize=34, color='black', ha='right', va='bottom',
                  fontweight='bold')
+    Anysotropy = "Anisotropy"
+    fig.text(0.94, 0.9,  Anysotropy, fontsize=34, color='black', ha='right', va='bottom',
+             fontweight='bold')
+    # Definir manualmente os ângulos de Phi (Xticks)
+    phi_ticks = np.linspace(0, 2 * np.pi, num=9)[:-1]  # Remove o último valor (360°)
+    phi_labels = [f'{int(np.degrees(tick))}°' for tick in phi_ticks]  # Cria os rótulos
+    ax.set_xticks(phi_ticks)
+    ax.set_xticklabels(phi_labels, fontsize=26, fontweight='bold')
 
-    plt.xticks(fontsize=11, fontweight='bold')
+    # Ajustar individualmente os pads de cada rótulo
+    pad_values = [1, -1, 3, 0, -7, -6, -1, -6]  # Valores personalizados para cada rótulo
+    for label, pad in zip(ax.get_xticklabels(), pad_values):
+        label.set_y(label.get_position()[1] + pad * 0.01)  # Move os rótulos individualmente
+
+    # Afasta os rótulos de Phi
+    ax.tick_params(pad=8)  # Ajuste global para todos os rótulos
     plt.yticks(fontsize=0, fontweight='bold')
     plt.draw()
 
     # Salvar a figura, se o caminho de salvamento for fornecido
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')  # Salva no caminho especificado
+        plt.savefig(save_path, dpi=200, bbox_inches='tight')  # Salva no caminho especificado
 
     # Exibir a figura por 600 segundos
     plt.pause(600)
 
 
 # Caminho do arquivo
-file_path = 'saida1.out'
-save_path = 'grafico_polar.png'
+file_path = 'bestFCC.out'
+save_path = 'grafico_polar3.png'
 df, r_factor_total = process_file(file_path)
+#r_factor_total=0.276
 my_variable = "{:.3f}".format(r_factor_total)
 plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=my_variable, save_path=save_path)
