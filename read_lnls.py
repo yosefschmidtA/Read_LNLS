@@ -21,7 +21,7 @@ def carregar_config(arquivo):
 
 # Ler parâmetros do arquivo config.txt
 parametros = carregar_config('config.txt')
-
+import matplotlib.colors as mcolors
 # Acessando os parâmetros no código
 file_prefix = parametros["file_prefix"]
 thetai = parametros["thetai"]
@@ -79,8 +79,8 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
         # Salvar a curva simetrizada
         intensity_symmetric[i, :] = f_symmetric
         save_dir = "FFT"
-        os.makedirs(save_dir, exist_ok=True)
-        # Plotar as curvas original e simetrizada (opcional)
+        #os.makedirs(save_dir, exist_ok=True)
+        '''# Plotar as curvas original e simetrizada (opcional)
         plt.figure()
         plt.plot(phi_values, f, label='Experimental', linestyle='--')
         plt.plot(phi_values, f_symmetric, label=f'FFT (C{symmetry})')
@@ -93,7 +93,7 @@ def fourier_symmetrization(theta_values, phi_values, intensity_values, symmetry)
         filepath = os.path.join(save_dir, filename)
         # Salvar a figura
         plt.savefig(filepath, dpi=100, bbox_inches='tight')
-        plt.close()
+        plt.close()'''
 
 
 
@@ -173,7 +173,6 @@ from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter1d
 import matplotlib
 matplotlib.use('TkAgg')
-plt.ion()
 output_file_path = '../simetrizados.txt'  # não mexa nesse arquivo
 # Função para gerar os nomes dos arquivos esperados
 
@@ -272,8 +271,10 @@ def process_file(file_name, output_file):
             def double_gaussian(x, amp1, mean1, std1, amp2, mean2, std2):
                 return (gaussian_fit(x, amp1, mean1, std1) + gaussian_fit(x, amp2, mean2, std2))
 
-            initial_guess = [20000, 10, 5, 5000, 30, 2]
-            bounds = ([10000, 5, 1, 500, 25, 1], [70000, 15, 10, 20000, 35, 4])
+            initial_guess = [5300, 9, 1,                 5500, 12.7, 1]#2  #1
+            bounds = ([5000, 8, 1,       3000, 12.5, 1],
+                      [100000, 10, 4,      6000, 14, 3])
+                       #A(i)P(i)La(i) #A(i2)P(i2)La(i2)---
             try:
                 popt, _ = curve_fit(double_gaussian, x_values, positive_values, p0=initial_guess, bounds=bounds)
                 amp1, mean1, std1, amp2, mean2, std2 = popt
@@ -285,13 +286,12 @@ def process_file(file_name, output_file):
 
         total_area = trapezoid(positive_values, x_values)
         print("Area: ", total_area)
-        plt.ion()
+
         if indice_de_plotagem == 0:
             return list(zip(y_corrected_smoothed, x_values)), total_area
 
         # Plotagem - Mantendo a estrutura original
         if indice_de_plotagem == 3:
-            plt.ion()
             title = f"XPS with Doniach-Sunjic (θ={theta_values}, φ={phi_values})"
             plt.figure(figsize=(10, 6))
             plt.plot(x_values, y_smoothed_raw, label='Original', marker='o')
@@ -310,8 +310,7 @@ def process_file(file_name, output_file):
             plt.pause(shirley_tempo)
             plt.close()
 
-        if indice_de_plotagem == 2:
-            plt.ion()
+        if indice_de_plotagem == 4:
             title = f"XPS with Gaussians components (θ={theta_values}, φ={phi_values})"
             plt.figure(figsize=(10, 6))
             plt.plot(x_values, y_smoothed_raw, label='Original', marker='o')
@@ -326,9 +325,7 @@ def process_file(file_name, output_file):
             plt.title(title)
             plt.legend()
             plt.grid(True)
-            plt.show()
-            plt.pause(shirley_tempo)
-            plt.close()
+
 
         if indice_de_plotagem == 1:
             #plt.ion()
@@ -350,9 +347,8 @@ def process_file(file_name, output_file):
             filepath = os.path.join(save_dir, filename)
             # Salvar a figura
             plt.savefig(filepath, dpi=100, bbox_inches='tight')
-            plt.close()
-            #plt.show()
-            #plt.pause(shirley_tempo)
+            plt.show()
+
 
         return list(zip(y_corrected_smoothed, x_values)), total_area
 
@@ -469,7 +465,7 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             phi_fine = np.arange(phii, phif + dphi, dphi)  # Usando phi_values
             intensity_fitted = polynomial_3(phi_fine, *popt)
             save_dir = "PoliThird"
-            os.makedirs(save_dir, exist_ok=True)
+            '''os.makedirs(save_dir, exist_ok=True)
             # Plotando os dados e o ajuste
             plt.figure(figsize=(8, 6))
             plt.plot(phi, intensity, linestyle='-', color='blue', alpha=0.5, label="Experimental")
@@ -478,12 +474,14 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             plt.xlabel("Phi")
             plt.ylabel("Intensity")
             plt.legend()
-            plt.grid()
-            filename = f"PoliCurve{theta}.jpg"
-            filepath = os.path.join(save_dir, filename)
+            plt.grid()'''
+            #filename = f"PoliCurve{theta}.jpg"
+            #filepath = os.path.join(save_dir, filename)
             # Salvar a figura
-            plt.savefig(filepath, dpi=100, bbox_inches='tight')
-            plt.close()
+            #plt.savefig(filepath, dpi=100, bbox_inches='tight')
+            #plt.show()
+            #plt.pause(poli_tempo)
+            #plt.close()
 
 
             # Se phi_values_to_evaluate for fornecido, calcule os valores para os pontos de phi fornecidos
@@ -693,7 +691,7 @@ for i, theta in enumerate(theta_values):
 
 save_to_text_file(data_df, intensity_symmetric, output_file_path)
 
-def process_file(file_path):
+def process_file(file_path, sigma=3, rotate_angle=0):
     with open(file_path, 'r') as file:
         lines = file.readlines()
 
@@ -717,14 +715,25 @@ def process_file(file_path):
                 data.append([phi, col1, col2, theta_value, intensity, True])  # Marcar como original
 
     df = pd.DataFrame(data, columns=['Phi', 'Col1', 'Col2', 'Theta', 'Intensity', 'IsOriginal'])
+
+    # Suavização da intensidade por Theta
+    df['Smoothed_Intensity'] = np.nan
+    for theta_value in df['Theta'].unique():
+        df_theta = df[df['Theta'] == theta_value].sort_values(by='Phi').copy()
+        if len(df_theta) > 1:
+            smoothed_intensity = gaussian_filter(df_theta['Intensity'].values, sigma=sigma)
+            df.loc[df['Theta'] == theta_value, 'Smoothed_Intensity'] = smoothed_intensity
+        elif len(df_theta) == 1:
+            df.loc[df['Theta'] == theta_value, 'Smoothed_Intensity'] = df_theta['Intensity'].values[0]
+
     ####################################################################################################################
     df_plot = df.copy()
 
     def rotate_phi_for_plot(df_plot, rotation_angle):
         """
         Mesma rotação, mas garante que Phi = 0 esteja presente **apenas** para plotagem.
+        Opera diretamente no df_plot de entrada.
         """
-        df_plot = df.copy()
         df_plot['Phi'] = (df_plot['Phi'] + rotation_angle) % 360
 
         if not np.isclose(df_plot['Phi'].min(), 0):
@@ -882,12 +891,13 @@ def process_file(file_path):
 
     return df, df_plot
 
+
 # Função para interpolar os dados
 def interpolate_data(df, resolution=1000):
     # Definir uma grade regular para a interpolação
     phi = np.radians(df['Phi'])
     theta = np.radians(df['Theta'])
-    intensity = df['Intensity']
+    intensity = df['Smoothed_Intensity'] # Usar a intensidade suavizada
 
     # Criando uma grade de pontos onde queremos interpolar
     phi_grid = np.linspace(np.min(phi), np.max(phi), resolution)
@@ -901,36 +911,42 @@ def interpolate_data(df, resolution=1000):
 
     return phi_grid, theta_grid, intensity_grid
 
-
+from scipy.ndimage import gaussian_filter
 # Função para gerar o gráfico polar
 def plot_polar_interpolated(df, resolution=500):
+
     # Interpolar os dados
     plt.ion()
+    matplotlib.use('TkAgg')
     phi_grid, theta_grid, intensity_grid = interpolate_data(df, resolution)
+
+    #intensity_grid = gaussian_filter(intensity_grid, sigma=3) # Você pode suavizar a grade interpolada também
     # Criando o gráfico polar
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(10,8), dpi=100)
 
-    # Plotando a intensidade interpolada
-    c = ax.pcolormesh(phi_grid, theta_grid, intensity_grid, shading='gouraud', cmap='afmhot')
 
+
+    norm = mcolors.PowerNorm(gamma=1.0, vmin=intensity_grid.min(), vmax=intensity_grid.max())
+
+    # Plotando a intensidade interpolada
+    c = ax.pcolormesh(phi_grid, theta_grid, intensity_grid, shading='gouraud', cmap='afmhot', norm=norm)
 
     # Definir o limite máximo do eixo theta com base no maior valor de theta nos dados
-    max_theta = df['Theta'].max()  # Maior valor de theta presente nos dados
-    ax.set_ylim(0, np.radians(max_theta))  # Limitar o eixo radial até o maior valor de theta
+    max_theta = df['Theta'].max()
+    ax.set_ylim(0, np.radians(max_theta))
 
-    # Adiciona rótulos para os ângulos theta, ajustados conforme o máximo de theta nos dados
-    theta_ticks = np.linspace(0, max_theta, num=6)  # Definir até 6 ticks no eixo theta
-    ax.set_yticks(np.radians(theta_ticks))  # Converte para radianos
-    ax.set_yticklabels([f'{int(tick)}°' for tick in theta_ticks],)  # Exibe como graus
-
+    # Adiciona rótulos para os ângulos theta
+    theta_ticks = np.linspace(0, max_theta, num=6)
+    ax.set_yticks(np.radians(theta_ticks))
+    ax.set_yticklabels([f'{int(tick)}°' for tick in theta_ticks])
 
     ax.set_xlabel('', fontsize=36)
-    ax.set_ylabel('', fontsize=36, labelpad=1, rotation = 360)
-    ax.yaxis.set_label_coords(0.8, 0.93)  # Ajustar a posição do rótulo 'φ'
+    ax.set_ylabel('', fontsize=36, labelpad=1, rotation=360)
+    ax.yaxis.set_label_coords(0.8, 0.93)
 
     # Adicionando a barra de cores
-    cbar = fig.colorbar(c, ax=ax, label=r'')
-    cbar.set_label(r'', fontsize=36)
+    cbar = fig.colorbar(c, ax=ax)
+    cbar.set_label('', fontsize=36)
 
     plt.xticks(fontsize=11)
     plt.yticks(fontsize=0)
@@ -1013,10 +1029,11 @@ def save_to_txt_with_blocks(df, file_name):
 
 
 # Processar os dados
-df, df_plot = process_file(file_path)
+df, df_plot = process_file(file_path, 1, rotate_angle)
 
 
 plot_polar_interpolated(df_plot)
 
 save_to_txt_with_blocks(df, arquivo_saida)
+
 
