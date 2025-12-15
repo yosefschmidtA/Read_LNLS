@@ -600,3 +600,4 @@ plot_polar_interpolated(df_plot, resolution=500, line_position=0.5, my_variable=
 EOF
 python3 $SCRIPT_NAME "$ARQUIVO"
     fi
+rm $SCRIPT_NAME
