@@ -224,41 +224,59 @@ with open(output_file_xps, 'w') as log_file:
 
 def process_file(file_name, output_file):
     """
-    Versão ROBUSTA (Modo Sport): Reutiliza a janela (Rápido) mas usa desenho padrão (Seguro).
-    Garante que os gráficos apareçam no WSL/XLaunch.
+    Versão CONFIG TOTAL: Lê chutes e limites exatos do arquivo de configuração.
+    Visualização: Modo IDL (Rápido) com distinção clara entre dados e fit.
     """
 
-    # --- PREPARAÇÃO VISUAL (Cria a janela uma única vez) ---
-    fig_shirley = None
-    ax_shirley = None
-    line_orig = None
-    line_bg = None
-    line_corr = None
-    fill_area = None
+    # --- CONFIGURAÇÃO VISUAL ---
+    fig_plot = None
+    ax_plot = None
+    
+    # Shirley
+    line_orig = line_bg = line_corr = None
+    
+    # Gaussianas
+    line_g_data = line_g1 = line_g2 = line_g_sum = None
 
+    plt.ion() 
+
+    # 1. SETUP SHIRLEY (Rápido)
     if indice_de_plotagem == 1:
-        plt.ion()
-        # Cria figura e eixos
-        fig_shirley, ax_shirley = plt.subplots(figsize=(8, 6))
-
-        # IMPORTANTE: Removi 'animated=True'. Agora o matplotlib desenha normalmente.
-        line_orig, = ax_shirley.plot([], [], '', label='Original', markersize=3)
-        line_bg, = ax_shirley.plot([], [], '--', label='Shirley Background')
-        line_corr, = ax_shirley.plot([], [], 'x', label='Correction')
-
-        ax_shirley.set_xlabel('Channel')
-        ax_shirley.set_ylabel('Intensity')
-        ax_shirley.legend(loc='upper right')
-        ax_shirley.grid(True)
-
-        # Mostra a janela inicial vazia
+        fig_plot, ax_plot = plt.subplots(figsize=(8, 5))
+        line_orig, = ax_plot.plot([], [], 'k-', label='Raw', linewidth=1.5)
+        line_bg, = ax_plot.plot([], [], 'k--', label='Background', linewidth=1)
+        line_corr, = ax_plot.plot([], [], 'r-', label='Corrected', linewidth=1.5)
+        ax_plot.set_ylabel('Intensity')
+        ax_plot.set_title("Modo Shirley")
+        ax_plot.grid(False)
         plt.show(block=False)
 
-        save_dir = "XPS_Shirley"
+    # 2. SETUP GAUSSIANAS (Detalhado)
+    elif indice_de_plotagem == 2:
+        fig_plot, ax_plot = plt.subplots(figsize=(8, 5))
+        
+        # 'ko' = Bolinhas pretas para os dados corrigidos (Experimental)
+        line_g_data, = ax_plot.plot([], [], 'ko', label='Corrected Data', markersize=5)
+        
+        # Componentes do fit (Tracejado)
+        line_g1, = ax_plot.plot([], [], 'b--', label='G1', linewidth=1)
+        line_g2, = ax_plot.plot([], [], 'g--', label='G2', linewidth=1)
+        
+        # Soma do Fit (Linha Sólida Vermelha)
+        line_g_sum, = ax_plot.plot([], [], 'r-', label='Fit Sum', linewidth=2)
+        
+        ax_plot.set_ylabel('Intensity')
+        ax_plot.set_title("Modo Gaussianas")
+        ax_plot.grid(False)
+        plt.show(block=False)
+
+    if indice_de_plotagem in [1, 2]:
+        save_dir = "XPS_Plots"
         os.makedirs(save_dir, exist_ok=True)
 
+
     def process_block(block, theta_values, phi_values):
-        # --- Definições Internas (Doniach, etc) ---
+        # --- Definições Matemáticas ---
         def doniach_sunjic(x, amp, mean, gamma, beta):
             denom = (x - mean) ** 2 + gamma ** 2
             return (amp / np.pi) * (gamma / denom) * (1 + beta * (x - mean) / denom)
@@ -266,57 +284,109 @@ def process_file(file_name, output_file):
         def double_doniach(x, amp1, mean1, gamma1, beta1, amp2, mean2, gamma2, beta2):
             return (doniach_sunjic(x, amp1, mean1, gamma1, beta1) + doniach_sunjic(x, amp2, mean2, gamma2, beta2))
 
-        # --- Processamento Matemático ---
-        y_values = np.array([row[0] for row in block])
-        x_values = np.array([row[1] for row in block])
+        def gaussian_fit(x, amp, mean, std):
+            return amp * np.exp(-((x - mean)**2) / (2 * std**2))
+
+        def double_gaussian(x, amp1, mean1, std1, amp2, mean2, std2):
+            return gaussian_fit(x, amp1, mean1, std1) + gaussian_fit(x, amp2, mean2, std2)
+
+        # --- Processamento ---
+        y_values = np.array([row[0] for row in block])  
+        x_values = np.array([row[1] for row in block]) 
 
         y_smoothed_raw = smooth(y_values, sigma=2.0)
+        
+        # Shirley Background
         init_back = 1
         end_back = len(x_values) - 1
-
         shirley_bg_smoothed = shirley_background(x_values, y_smoothed_raw, init_back, end_back)
         y_corrected_smoothed = y_smoothed_raw - shirley_bg_smoothed
 
         positive_values = y_corrected_smoothed.copy()
         positive_values[positive_values < 0] = 0
+        
+        # --- Fitting (Configuração Total via Arquivo) ---
+        fitted_g1 = np.zeros_like(x_values)
+        fitted_g2 = np.zeros_like(x_values)
+        fitted_sum = np.zeros_like(x_values)
 
-        total_area = trapezoid(positive_values, x_values)
-        print(f"Theta: {float(theta_values):.1f} | Phi: {float(phi_values):.1f} | Area: {total_area:.2f}")
+        # Área padrão = Experimental Total (caso gaures=0 ou falha no fit)
+        area_final = trapezoid(positive_values, x_values)
 
-        # --- PLOTAGEM SEGURA (Set Data + Draw) ---
-        if indice_de_plotagem == 1:
-            nonlocal fill_area
+        if indice_de_plotagem == 2:
+            try:
+                # 1. Monta o Chute Inicial (_ini) lendo do dicionário global 'parametros'
+                initial_guess = [
+                    parametros['g1_amp_ini'], parametros['g1_pos_ini'], parametros['g1_wid_ini'],
+                    parametros['g2_amp_ini'], parametros['g2_pos_ini'], parametros['g2_wid_ini']
+                ]
+                
+                # 2. Monta os Limites Inferiores (_min) e Superiores (_max)
+                bounds_min = [
+                    parametros['g1_amp_min'], parametros['g1_pos_min'], parametros['g1_wid_min'],
+                    parametros['g2_amp_min'], parametros['g2_pos_min'], parametros['g2_wid_min']
+                ]
+                
+                bounds_max = [
+                    parametros['g1_amp_max'], parametros['g1_pos_max'], parametros['g1_wid_max'],
+                    parametros['g2_amp_max'], parametros['g2_pos_max'], parametros['g2_wid_max']
+                ]
+                
+                # A função curve_fit espera bounds no formato ([mins], [maxs])
+                bounds = (bounds_min, bounds_max)
 
-            # 1. Atualiza os dados (Rápido)
-            line_orig.set_data(x_values, y_smoothed_raw)
-            line_bg.set_data(x_values, shirley_bg_smoothed)
-            line_corr.set_data(x_values, y_corrected_smoothed)
+                # 3. Realiza o Fit
+                popt, _ = curve_fit(double_gaussian, x_values, positive_values, p0=initial_guess, bounds=bounds)
+                amp1, mean1, std1, amp2, mean2, std2 = popt
+                
+                fitted_g1 = gaussian_fit(x_values, amp1, mean1, std1)
+                fitted_g2 = gaussian_fit(x_values, amp2, mean2, std2)
+                fitted_sum = fitted_g1 + fitted_g2
 
-            # 2. Atualiza título
-            ax_shirley.set_title(f"XPS (Shirley): (θ={float(theta_values):.1f}, φ={float(phi_values):.1f})")
+                # 4. Define qual área retornar baseado no 'gaures' do config
+                tipo_retorno = parametros.get('gaures', 0)
+                
+                if tipo_retorno == 1:
+                    area_final = trapezoid(fitted_g1, x_values) # Área G1
+                elif tipo_retorno == 2:
+                    area_final = trapezoid(fitted_g2, x_values) # Área G2
+                elif tipo_retorno == 3:
+                    area_final = trapezoid(fitted_sum, x_values) # Área da Soma Fitada
 
-            # 3. Atualiza preenchimento amarelo (Remove velho -> Cria novo)
-            if fill_area: fill_area.remove()
-            fill_area = ax_shirley.fill_between(x_values, positive_values, color='yellow', alpha=0.5)
+            except Exception as e:
+                # Se falhar (ex: chave faltando no config ou erro matemático), mantém área experimental
+                # print(f"Fit failed or config missing: {e}")
+                pass
 
-            # 4. Reajusta Escala (Zoom automático)
-            ax_shirley.relim()
-            ax_shirley.autoscale_view()
+        print(f"Theta: {float(theta_values):.1f} | Phi: {float(phi_values):.1f} | Area: {area_final:.2f}")
 
-            # 5. Desenha e Pausa (Obrigatório para aparecer no WSL)
+        # --- ATUALIZAÇÃO VISUAL ---
+        if indice_de_plotagem in [1, 2]:
+            ax_plot.set_title(f"T:{float(theta_values):.0f} P:{float(phi_values):.0f}", fontsize=10)
+
+            if indice_de_plotagem == 1:
+                line_orig.set_data(x_values, y_smoothed_raw)
+                line_bg.set_data(x_values, shirley_bg_smoothed)
+                line_corr.set_data(x_values, y_corrected_smoothed)
+
+            elif indice_de_plotagem == 2:
+                # Dados corrigidos (bolinhas pretas)
+                line_g_data.set_data(x_values, positive_values) 
+                # Componentes e Soma (linhas)
+                line_g1.set_data(x_values, fitted_g1)
+                line_g2.set_data(x_values, fitted_g2)
+                line_g_sum.set_data(x_values, fitted_sum)
+
+            ax_plot.relim()
+            ax_plot.autoscale_view()
             plt.draw()
+            
+            if shirley_tempo > 0:
+                plt.pause(shirley_tempo)
+            else:
+                plt.pause(0.001)
 
-            # O plt.pause faz duas coisas: atualiza a janela gráfica e espera o tempo
-            # Se shirley_tempo for muito baixo (ex: 0.001), será quase instantâneo.
-            # Se quiser ver com calma, aumente no config.txt
-            plt.pause(shirley_tempo)
-
-            # Salvar figura (opcional)
-            # filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.jpg"
-            # fig_shirley.savefig(os.path.join(save_dir, filename))
-
-        return list(zip(y_corrected_smoothed, x_values)), total_area
-    # --- LEITURA DO ARQUIVO (ORIGINAL RESTAURADA) ---
+        return list(zip(y_corrected_smoothed, x_values)), area_final
     with open(file_name, 'r') as file:
         data = file.readlines()
 

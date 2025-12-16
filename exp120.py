@@ -244,7 +244,7 @@ def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=N
         label.set_fontweight('bold')
 
     if my_variable is not None:
-        fig.text(0.87, 0.03, f'R-factor: {my_variable}', fontsize=34, color='black', ha='right', va='bottom', fontweight='bold')
+        fig.text(0.87, 0.03, f'{my_variable}', fontsize=34, color='black', ha='right', va='bottom', fontweight='bold')
     
     fig.text(0.94, 0.9, "Anisotropy", fontsize=34, color='black', ha='right', va='bottom', fontweight='bold')
 
@@ -267,7 +267,7 @@ def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=N
 
     plt.pause(600)
 # Caminho do arquivo
-file_path = 'ga177.txt'
+file_path = 'teste.txt'
 save_path = 'grafico_polar3.png'
 df,r_total = process_file(file_path)
 #r_factor_total=0.276
