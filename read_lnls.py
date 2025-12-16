@@ -1,3 +1,4 @@
+import time
 def carregar_config(arquivo):
     parametros = {}
     with open(arquivo, 'r') as f:
@@ -221,13 +222,43 @@ with open(output_file_xps, 'w') as log_file:
                     data_one_column.append(value)
                     log_file.write(f"{value} {contador_banda}\n")
 
-
 def process_file(file_name, output_file):
     """
-    Lê o arquivo de entrada e processa os dados aplicando o fundo Shirley.
+    Versão ROBUSTA (Modo Sport): Reutiliza a janela (Rápido) mas usa desenho padrão (Seguro).
+    Garante que os gráficos apareçam no WSL/XLaunch.
     """
 
+    # --- PREPARAÇÃO VISUAL (Cria a janela uma única vez) ---
+    fig_shirley = None
+    ax_shirley = None
+    line_orig = None
+    line_bg = None
+    line_corr = None
+    fill_area = None
+
+    if indice_de_plotagem == 1:
+        plt.ion()
+        # Cria figura e eixos
+        fig_shirley, ax_shirley = plt.subplots(figsize=(8, 6))
+
+        # IMPORTANTE: Removi 'animated=True'. Agora o matplotlib desenha normalmente.
+        line_orig, = ax_shirley.plot([], [], '', label='Original', markersize=3)
+        line_bg, = ax_shirley.plot([], [], '--', label='Shirley Background')
+        line_corr, = ax_shirley.plot([], [], 'x', label='Correction')
+
+        ax_shirley.set_xlabel('Channel')
+        ax_shirley.set_ylabel('Intensity')
+        ax_shirley.legend(loc='upper right')
+        ax_shirley.grid(True)
+
+        # Mostra a janela inicial vazia
+        plt.show(block=False)
+
+        save_dir = "XPS_Shirley"
+        os.makedirs(save_dir, exist_ok=True)
+
     def process_block(block, theta_values, phi_values):
+        # --- Definições Internas (Doniach, etc) ---
         def doniach_sunjic(x, amp, mean, gamma, beta):
             denom = (x - mean) ** 2 + gamma ** 2
             return (amp / np.pi) * (gamma / denom) * (1 + beta * (x - mean) / denom)
@@ -235,8 +266,9 @@ def process_file(file_name, output_file):
         def double_doniach(x, amp1, mean1, gamma1, beta1, amp2, mean2, gamma2, beta2):
             return (doniach_sunjic(x, amp1, mean1, gamma1, beta1) + doniach_sunjic(x, amp2, mean2, gamma2, beta2))
 
-        y_values = np.array([row[0] for row in block])  # Intensidades
-        x_values = np.array([row[1] for row in block])  # Índices/canais
+        # --- Processamento Matemático ---
+        y_values = np.array([row[0] for row in block])
+        x_values = np.array([row[1] for row in block])
 
         y_smoothed_raw = smooth(y_values, sigma=2.0)
         init_back = 1
@@ -245,113 +277,46 @@ def process_file(file_name, output_file):
         shirley_bg_smoothed = shirley_background(x_values, y_smoothed_raw, init_back, end_back)
         y_corrected_smoothed = y_smoothed_raw - shirley_bg_smoothed
 
-        # Forçar valores positivos (removendo possíveis artefatos negativos)
         positive_values = y_corrected_smoothed.copy()
         positive_values[positive_values < 0] = 0
 
-        fitted_double_doniach = fitted_double_gaussian = np.zeros_like(x_values)
-
-        # Ajuste Doniach-Sunjic apenas se indice_de_plotagem == 1
-
-        if indice_de_plotagem == 3:
-            initial_guess_doniach = [210000, 15, 1, 0.1, 10000, 31, 1, 0.1]
-            bounds_doniach = ([200000, 10, 0.5, 0, 5000, 30, 0.5, 0], [300000, 20, 8, 2, 50000, 32, 4, 2])
-            try:
-                popt_doniach, _ = curve_fit(double_doniach, x_values, positive_values, p0=initial_guess_doniach,
-                                            bounds=bounds_doniach)
-                amp1, mean1, gamma1, beta1, amp2, mean2, gamma2, beta2 = popt_doniach
-                doniach1 = doniach_sunjic(x_values, amp1, mean1, gamma1, beta1)
-                doniach2 = doniach_sunjic(x_values, amp2, mean2, gamma2, beta2)
-                fitted_double_doniach = doniach1 + doniach2
-            except Exception as e:
-                print(f"Erro no ajuste das Doniach-Sunjic: {e}")
-
-        # Ajuste Gaussianas apenas se indice_de_plotagem == 2
-        if indice_de_plotagem == 2:
-            def double_gaussian(x, amp1, mean1, std1, amp2, mean2, std2):
-                return (gaussian_fit(x, amp1, mean1, std1) + gaussian_fit(x, amp2, mean2, std2))
-
-            initial_guess = [5300, 9, 1,                 5500, 12.7, 1]#2  #1
-            bounds = ([5000, 8, 1,       3000, 12.5, 1],
-                      [100000, 10, 4,      6000, 14, 3])
-                       #A(i)P(i)La(i) #A(i2)P(i2)La(i2)---
-            try:
-                popt, _ = curve_fit(double_gaussian, x_values, positive_values, p0=initial_guess, bounds=bounds)
-                amp1, mean1, std1, amp2, mean2, std2 = popt
-                gaussian1 = gaussian_fit(x_values, amp1, mean1, std1)
-                gaussian2 = gaussian_fit(x_values, amp2, mean2, std2)
-                fitted_double_gaussian = gaussian1 + gaussian2
-            except Exception as e:
-                print(f"Erro no ajuste das gaussianas: {e}")
-
         total_area = trapezoid(positive_values, x_values)
-        print("Area: ", total_area)
+        print(f"Theta: {float(theta_values):.1f} | Phi: {float(phi_values):.1f} | Area: {total_area:.2f}")
 
-        if indice_de_plotagem == 0:
-            return list(zip(y_corrected_smoothed, x_values)), total_area
-
-        # Plotagem - Mantendo a estrutura original
-        if indice_de_plotagem == 3:
-            title = f"XPS with Doniach-Sunjic (θ={theta_values}, φ={phi_values})"
-            plt.figure(figsize=(10, 6))
-            plt.plot(x_values, y_smoothed_raw, label='Original', marker='o')
-            plt.plot(x_values, shirley_bg_smoothed, label='Shirley Background', linestyle='--')
-            plt.plot(x_values, y_corrected_smoothed, label='Corrected', marker='x')
-            plt.plot(x_values, doniach1, label='Doniach 1', linestyle='-.', color='blue')
-            plt.plot(x_values, doniach2, label='Doniach 2', linestyle=':', color='green')
-            plt.plot(x_values, fitted_double_doniach, label='Sum of Doniach-Sunjic functions', color='red')
-            plt.fill_between(x_values, positive_values, color='yellow', alpha=0.5, label='Corrected Area')
-            plt.xlabel('Channel')
-            plt.ylabel('Intensity')
-            plt.title(title)
-            plt.legend()
-            plt.grid(True)
-            plt.show()
-            plt.pause(shirley_tempo)
-            plt.close()
-
-        if indice_de_plotagem == 4:
-            title = f"XPS with Gaussians components (θ={theta_values}, φ={phi_values})"
-            plt.figure(figsize=(10, 6))
-            plt.plot(x_values, y_smoothed_raw, label='Original', marker='o')
-            plt.plot(x_values, shirley_bg_smoothed, label='Shirley Background', linestyle='--')
-            plt.plot(x_values, y_corrected_smoothed, label='Corrected', marker='x')
-            plt.plot(x_values, gaussian1, label='Gaussian 1', linestyle='-.', color='blue')
-            plt.plot(x_values, gaussian2, label='Gaussian 2', linestyle=':', color='green')
-            plt.plot(x_values, fitted_double_gaussian, label='Sum of the Gaussians', color='red')
-            plt.fill_between(x_values, positive_values, color='yellow', alpha=0.5, label='Corrected Area')
-            plt.xlabel('Channel')
-            plt.ylabel('Intensity')
-            plt.title(title)
-            plt.legend()
-            plt.grid(True)
-
-
+        # --- PLOTAGEM SEGURA (Set Data + Draw) ---
         if indice_de_plotagem == 1:
-            #plt.ion()
-            save_dir = "XPS_Shirley"
-            os.makedirs(save_dir, exist_ok=True)
-            title = f"X-ray Photoelectron Spectrocopy: (θ={theta_values}, φ={phi_values})"
-            plt.figure(figsize=(8, 6))
-            plt.plot(x_values, y_smoothed_raw, label='Original', marker='o')
-            plt.plot(x_values, shirley_bg_smoothed, label='Shirley Background', linestyle='--')
-            plt.plot(x_values, y_corrected_smoothed, label='Correction', marker='x')
-            plt.fill_between(x_values, positive_values, color='yellow', alpha=0.5, label='Corrected Area')
-            plt.xlabel('Channel')
-            plt.ylabel('Intensity')
-            plt.title(title)
-            plt.legend()
-            plt.grid(True)
-            #Nome do arquivo (usando os valores de θ e φ para identificação)
-            filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.jpg"
-            filepath = os.path.join(save_dir, filename)
-            # Salvar a figura
-            plt.savefig(filepath, dpi=100, bbox_inches='tight')
-            plt.show()
+            nonlocal fill_area
 
+            # 1. Atualiza os dados (Rápido)
+            line_orig.set_data(x_values, y_smoothed_raw)
+            line_bg.set_data(x_values, shirley_bg_smoothed)
+            line_corr.set_data(x_values, y_corrected_smoothed)
+
+            # 2. Atualiza título
+            ax_shirley.set_title(f"XPS (Shirley): (θ={float(theta_values):.1f}, φ={float(phi_values):.1f})")
+
+            # 3. Atualiza preenchimento amarelo (Remove velho -> Cria novo)
+            if fill_area: fill_area.remove()
+            fill_area = ax_shirley.fill_between(x_values, positive_values, color='yellow', alpha=0.5)
+
+            # 4. Reajusta Escala (Zoom automático)
+            ax_shirley.relim()
+            ax_shirley.autoscale_view()
+
+            # 5. Desenha e Pausa (Obrigatório para aparecer no WSL)
+            plt.draw()
+
+            # O plt.pause faz duas coisas: atualiza a janela gráfica e espera o tempo
+            # Se shirley_tempo for muito baixo (ex: 0.001), será quase instantâneo.
+            # Se quiser ver com calma, aumente no config.txt
+            plt.pause(shirley_tempo)
+
+            # Salvar figura (opcional)
+            # filename = f"XPS_Shirley_theta_{theta_values}_phi_{phi_values}.jpg"
+            # fig_shirley.savefig(os.path.join(save_dir, filename))
 
         return list(zip(y_corrected_smoothed, x_values)), total_area
-
+    # --- LEITURA DO ARQUIVO (ORIGINAL RESTAURADA) ---
     with open(file_name, 'r') as file:
         data = file.readlines()
 
@@ -359,7 +324,7 @@ def process_file(file_name, output_file):
     block = []
     header = None
 
-    # Processa cada linha do arquivo
+    # Processa cada linha do arquivo (Lógica preservada)
     for line in data:
         columns = line.strip().split()
 
@@ -369,13 +334,15 @@ def process_file(file_name, output_file):
                 corrected_data.append((header, process_block(block, theta_values, phi_values)))
                 block = []
             header = line.strip()  # Salva o cabeçalho do bloco atual
+
         elif len(columns) == 2:
             # Adiciona valores ao bloco atual
             block.append([float(columns[0]), int(columns[1])])
 
         if len(columns) == 3:
-            theta_values = columns[0]  # Ajuste conforme necessário
-            phi_values = columns[1]   # Ajuste conforme necessário
+            # Captura Theta e Phi (mantidos como string aqui, convertidos dentro do process_block se precisar)
+            theta_values = columns[0]
+            phi_values = columns[1]
 
     if block:
         corrected_data.append((header, process_block(block, theta_values, phi_values)))
@@ -387,8 +354,6 @@ def process_file(file_name, output_file):
             out_file.write(f"{header} {total_area:.1f}\n")
             for y_corr, x in block_data[0]:
                 out_file.write(f"{y_corr:.2f} {x}\n")
-
-
 
 # Arquivos de entrada e saída
 file_name = "../saidaxps.txt"
