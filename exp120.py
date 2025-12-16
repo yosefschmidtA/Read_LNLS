@@ -267,7 +267,7 @@ def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=N
 
     plt.pause(600)
 # Caminho do arquivo
-file_path = 'expGarotate.txt'
+file_path = 'ga177.txt'
 save_path = 'grafico_polar3.png'
 df,r_total = process_file(file_path)
 #r_factor_total=0.276

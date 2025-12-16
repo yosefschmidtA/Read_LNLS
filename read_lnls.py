@@ -690,7 +690,60 @@ for i, theta in enumerate(theta_values):
 # Salvar os resultados em um arquivo de texto no formato desejado
 
 save_to_text_file(data_df, intensity_symmetric, output_file_path)
+def aplicar_simetria_universal(df_input):
+    """
+    Recebe um DataFrame experimental parcial e preenche o círculo completo (0 a 360)
+    baseado na detecção automática de simetria.
+    """
+    df = df_input.copy()
+    
+    # 1. Detectar o intervalo angular
+    phi_min = df['Phi'].min()
+    phi_max = df['Phi'].max()
+    phi_interval = phi_max - phi_min
+    
+    step = None
+    
+    # 2. Identificar a Simetria
+    if phi_interval > 350:
+        return df # Já está completo, não faz nada
+        
+    elif 170 < phi_interval < 190: # Cobre 177, 180...
+        step = 180
+        print(f"Simetria C2v detectada (Intervalo {phi_interval:.1f}°). Passo: 180°")
+        
+    elif 80 < phi_interval < 135: # Cobre 87, 90, 117, 120...
+        # Se for maior que 105 (ex: 117), é 120. Se menor (ex: 87), é 90.
+        step = 120 if phi_interval > 105 else 90
+        print(f"Simetria Setorial detectada (Intervalo {phi_interval:.1f}°). Passo: {step}°")
 
+    # 3. Aplicar a Replicação
+    if step is not None:
+        dfs_to_concat = [df]
+        current_shift = step
+        
+        # Replica enquanto não der uma volta completa
+        while current_shift < 360:
+            df_new = df.copy()
+            
+            # AQUI ESTÁ A CORREÇÃO DO BUG 485:
+            # Somamos o shift e tiramos o módulo 360.
+            # Ex: 305 + 180 = 485 -> 485 % 360 = 125.
+            df_new['Phi'] = (df_new['Phi'] + current_shift) % 360
+            
+            # Marca como IsOriginal = True para aparecer no TXT final
+            # (Assumindo que você quer salvar o dado simetrizado completo)
+            df_new['IsOriginal'] = True 
+            
+            dfs_to_concat.append(df_new)
+            current_shift += step
+            
+        df = pd.concat(dfs_to_concat, ignore_index=True)
+        
+        # Ordena para ficar bonito no arquivo de texto (Phi crescente)
+        df = df.sort_values(by=['Theta', 'Phi']).reset_index(drop=True)
+
+    return df
 def process_file(file_path, sigma=3, rotate_angle=0):
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -698,25 +751,23 @@ def process_file(file_path, sigma=3, rotate_angle=0):
     data = []
     theta_value = None
 
+    # Leitura do Arquivo (Mantida igual)
     for i in range(17, len(lines)):
         line = lines[i].strip()
-
         if line:
             parts = line.split()
-
             if len(parts) == 6:
                 theta_value = float(parts[3])
-
             elif len(parts) == 4 and theta_value is not None:
                 phi = float(parts[0])
                 col1 = float(parts[1])
                 col2 = float(parts[2])
                 intensity = float(parts[3])
-                data.append([phi, col1, col2, theta_value, intensity, True])  # Marcar como original
+                data.append([phi, col1, col2, theta_value, intensity, True])
 
     df = pd.DataFrame(data, columns=['Phi', 'Col1', 'Col2', 'Theta', 'Intensity', 'IsOriginal'])
 
-    # Suavização da intensidade por Theta
+    # Suavização (Mantida igual)
     df['Smoothed_Intensity'] = np.nan
     for theta_value in df['Theta'].unique():
         df_theta = df[df['Theta'] == theta_value].sort_values(by='Phi').copy()
@@ -726,171 +777,11 @@ def process_file(file_path, sigma=3, rotate_angle=0):
         elif len(df_theta) == 1:
             df.loc[df['Theta'] == theta_value, 'Smoothed_Intensity'] = df_theta['Intensity'].values[0]
 
-    ####################################################################################################################
-    df_plot = df.copy()
+    # Rotação Inicial (se houver)
+    if rotate_angle != 0:
+        df['Phi'] = (df['Phi'] + rotate_angle) % 360
 
-    def rotate_phi_for_plot(df_plot, rotation_angle):
-        """
-        Mesma rotação, mas garante que Phi = 0 esteja presente **apenas** para plotagem.
-        Opera diretamente no df_plot de entrada.
-        """
-        df_plot['Phi'] = (df_plot['Phi'] + rotation_angle) % 360
-
-        if not np.isclose(df_plot['Phi'].min(), 0):
-            df_0 = df_plot[df_plot['Phi'] == df_plot['Phi'].min()].copy()
-            df_0['Phi'] = 0
-            df_plot = pd.concat([df_plot, df_0], ignore_index=True)
-
-        return df_plot
-    df_plot = rotate_phi_for_plot(df_plot, rotate_angle)
-    # Verificar o intervalo de Phi
-    phi_min2 = df_plot['Phi'].min()
-    phi_max2 = df_plot['Phi'].max()
-    phi_interval2 = phi_max2 - phi_min2
-
-    if phi_interval2 < 360:
-        # Encontrar o menor valor de Phi e garantir que ele esteja no intervalo correto
-        phi_min2 = df_plot['Phi'].min()
-
-        # Pegar as linhas que têm Phi próximo de phi_min
-        df_360 = df_plot[np.isclose(df_plot['Phi'], phi_min2)].copy()
-        df_360['Phi'] = 360  # Ajustar para 360°
-
-        df_plot = pd.concat([df_plot, df_360], ignore_index=True)
-
-
-    if phi_interval2 == 120:
-        # Replicação dos dados para cobrir 360 graus
-        first_values = df_plot.groupby('Theta').first().reset_index()
-        df_plot = df_plot.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
-        last_values = df_plot.groupby('Theta').last().reset_index()  # Pegar os últimos valores
-        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
-        # Adicionar os novos valores ao DataFrame
-        df_plot = pd.concat([df_plot, last_values], ignore_index=True)
-
-        df_0_120 = df_plot.copy()
-        df_0_120['Phi'] = 120 + df_0_120['Phi']
-        df_0_120['isOriginal'] = False
-
-        df_240_360 = df_plot.copy()
-        df_240_360['Phi'] = 240 + df_240_360['Phi']
-
-        df_plot = pd.concat([df_plot, df_0_120, df_240_360]).reset_index(drop=True)
-
-    if phi_interval2 == 90:
-        # Replicação dos dados para cobrir 360 graus
-        first_values = df_plot.groupby('Theta').first().reset_index()
-        df_plot = df_plot.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
-        last_values = df_plot.groupby('Theta').last().reset_index()  # Pegar os últimos valores
-        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
-
-        # Adicionar os novos valores ao DataFrame
-        df_plot = pd.concat([df_plot, last_values], ignore_index=True)
-        df_0_90 = df_plot.copy()
-        df_0_90['Phi'] = 90 + df_0_90['Phi']
-
-        df_90_180 = df_plot.copy()
-        df_90_180['Phi'] = 180 + df_90_180['Phi']
-
-        df_180_270 = pd.concat([df_plot,df_0_90]).reset_index(drop=True)
-        df_180_270['Phi'] = 180 + df_180_270['Phi']
-
-        df_plot = pd.concat([df_plot, df_0_90, df_180_270]).reset_index(drop=True)
-
-    if phi_interval2 == 177:
-        first_values = df_plot.groupby('Theta').first().reset_index()
-        df_plot = df_plot.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
-        last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
-        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
-        df_plot = pd.concat([df_plot, last_values], ignore_index=True)
-
-        df_0_180 = df_plot.copy()
-        df_0_180['Phi'] = 180 + df_0_180['Phi']
-        df_plot = pd.concat([df_plot, df_0_180]).reset_index(drop=True)
-
-    ####################################################################################################################
-    def rotate_phi(df, rotation_angle):
-        """
-        Rotaciona os valores de Phi no DataFrame garantindo que permaneçam no intervalo [0, 360).
-
-        Parâmetros:
-        - df (pd.DataFrame): DataFrame com a coluna 'Phi'.
-        - rotation_angle (float): Ângulo de rotação em graus.
-
-        Retorna:
-        - pd.DataFrame: DataFrame com Phi rotacionado.
-        """
-        df['Phi'] = (df['Phi'] + rotation_angle) % 360
-        return df
-        # Verificar o intervalo de Phi
-
-    df = rotate_phi(df, rotate_angle)
-
-    phi_min = df['Phi'].min()
-    phi_max = df['Phi'].max()
-    phi_interval = phi_max - phi_min
-
-    if phi_interval < 360:
-        # Encontrar o menor valor de Phi e garantir que ele esteja no intervalo correto
-        phi_min = df['Phi'].min()
-
-        # Pegar as linhas que têm Phi próximo de phi_min
-        df_360 = df[np.isclose(df['Phi'], phi_min)].copy()
-        df_360['Phi'] = 360  # Ajustar para 360°
-
-        df = pd.concat([df, df_360], ignore_index=True)
-
-    if phi_interval == 120:
-        # Replicação dos dados para cobrir 360 graus
-        first_values = df.groupby('Theta').first().reset_index()
-        df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
-        last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
-        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
-        # Adicionar os novos valores ao DataFrame
-        df = pd.concat([df, last_values], ignore_index=True)
-
-        df_0_120 = df.copy()
-        df_0_120['Phi'] = 120 + df_0_120['Phi']
-        df_0_120['isOriginal'] = False
-
-        df_240_360 = df.copy()
-        df_240_360['Phi'] = 240 + df_240_360['Phi']
-
-        df = pd.concat([df, df_0_120, df_240_360]).reset_index(drop=True)
-
-    if phi_interval == 90:
-        # Replicação dos dados para cobrir 360 graus
-        first_values = df.groupby('Theta').first().reset_index()
-        df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
-        last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
-        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
-
-        # Adicionar os novos valores ao DataFrame
-        df = pd.concat([df, last_values], ignore_index=True)
-        df_0_90 = df.copy()
-        df_0_90['Phi'] = 90 + df_0_90['Phi']
-
-        df_90_180 = df.copy()
-        df_90_180['Phi'] = 180 + df_90_180['Phi']
-
-        df_180_270 = pd.concat([df,df_0_90]).reset_index(drop=True)
-        df_180_270['Phi'] = 180 + df_180_270['Phi']
-
-        df = pd.concat([df, df_0_90, df_180_270]).reset_index(drop=True)
-
-    if phi_interval == 177:
-        first_values = df.groupby('Theta').first().reset_index()
-        df = df.groupby('Theta', group_keys=False).apply(lambda x: x.drop(x.index[0]))
-        last_values = df.groupby('Theta').last().reset_index()  # Pegar os últimos valores
-        last_values['Phi'] = first_values['Phi']  # Substituir pelo valor do primeiro Phi original
-        df = pd.concat([df, last_values], ignore_index=True)
-
-        df_0_180 = df.copy()
-        df_0_180['Phi'] = 180 + df_0_180['Phi']
-        df = pd.concat([df, df_0_180]).reset_index(drop=True)
-
-    return df, df_plot
-
+    return df
 
 # Função para interpolar os dados
 def interpolate_data(df, resolution=1000):
@@ -1041,14 +932,13 @@ def save_to_txt_with_blocks(df, file_name):
                     else:  # Acima de 100000
                         col2_format = f"{row.Col2:1.0f}."  # Exemplo: "100697.0" (com ponto
                     file.write(f"      {phi_format}      {col1_format}      {col2_format}   {row.Intensity: 10.7f}\n")
-        file.write(f"fitted parameters (\n")
 
 
 # Processar os dados
-df, df_plot = process_file(file_path, 1, rotate_angle)
+df = process_file(file_path, 1, rotate_angle)
 
 
-plot_polar_interpolated(df_plot)
+#plot_polar_interpolated(df_plot)
 
 save_to_txt_with_blocks(df, arquivo_saida)
 
