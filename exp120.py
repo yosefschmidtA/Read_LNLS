@@ -85,7 +85,7 @@ def process_file(file_path):
         
         parts = line.split()
 
-        # Identifica a linha de cabeçalho do ângulo Theta
+        # Identifica a linha de cabeçalho do âddngulo Theta
         # Ex: 1 40 16.6600 18.0000 1.00000 0.00000 (6 colunas)
         # O Theta é a 4ª coluna (índice 3) -> 18.0000
         if len(parts) == 6:
@@ -124,99 +124,112 @@ def process_file(file_path):
     phi_min = df['Phi'].min()
     phi_max = df['Phi'].max()
     phi_interval = phi_max - phi_min
+    step = None 
+
+    # 1. Identificação do Passo de Simetria
     if phi_interval > 350:
-        print("Varredura completa detectada. Costurando as bordas...")
-        
-        # Pega um pedacinho do início (0 a 10) e joga lá na frente (360 a 370)
-        subset_start = df[df['Phi'] < 10].copy()
-        subset_start['Phi'] = subset_start['Phi'] + 360
-        
-        # Pega um pedacinho do fim (>350) e joga lá trás (negativo)
-        # Isso garante que a interpolação em 0 graus fique perfeita
-        subset_end = df[df['Phi'] > (phi_max - 10)].copy()
-        subset_end['Phi'] = subset_end['Phi'] - 360
-        
-        df = pd.concat([df, subset_start, subset_end], ignore_index=True)
+        print("Varredura Completa. Apenas fechando bordas.")
+        step = 360 # O passo é o próprio círculo
+    elif 170 < phi_interval < 190:
+        print("Simetria C2v (180°).")
+        step = 180
+    elif 80 < phi_interval < 135:
+        step = 120 if phi_interval > 105 else 90
+        print(f"Simetria Setorial ({step}°).")
 
-    # CASO 2: Simetria Setorial (C3v ~120 ou C4v ~90)
-    elif 80 < phi_interval < 130:
-        print(f"Simetria setorial detectada. Aplicando Super Sobreposição...")
-
-        # Define o passo (120 ou 90)
-        step = 120 if phi_interval > 100 else 90
-        
-        dfs_to_concat = []
-        
-        # 1. Cópia "Anterior" (para fechar o buraco perto do zero)
-        df_minus = df.copy()
-        df_minus['Phi'] = df_minus['Phi'] - step
-        dfs_to_concat.append(df_minus)
-        
-        # 2. O Original
-        dfs_to_concat.append(df)
-        
-        # 3. Cópias "Posteriores" até cobrir 360
+    # 2. Replicação Robusta (Cobre buracos grandes)
+    if step is not None and step < 360:
+        dfs_to_concat = [df]
         current_shift = step
-        while current_shift <= 360 + step: # +step extra para garantir sobra
+        # Replica até passar de 360
+        while current_shift <= 360 + step:
             df_shift = df.copy()
             df_shift['Phi'] = df_shift['Phi'] + current_shift
             dfs_to_concat.append(df_shift)
             current_shift += step
-            
+        
+        # Replica para trás também (importante para o 0 ser contínuo)
+        df_minus = df.copy()
+        df_minus['Phi'] = df_minus['Phi'] - step
+        dfs_to_concat.append(df_minus)
+        
         df = pd.concat(dfs_to_concat, ignore_index=True)
 
+    # 3. "GAMBIARRA" AUTOMATIZADA (GHOST POINTS)
+    # Aqui resolvemos a linha. Criamos uma margem de segurança.
+    # Pegamos tudo que está perto de 360 e jogamos para o 0 (negativo)
+    # Pegamos tudo que está perto de 0 e jogamos para o 360 (positivo)
+    
+    margin = 40 # Graus de margem de segurança
+    
+    # Pega o final do círculo e joga para trás do zero (ex: 350 vira -10)
+    subset_end = df[df['Phi'] > (360 - margin)].copy()
+    subset_end['Phi'] = subset_end['Phi'] - 360
+    
+    # Pega o início do círculo e joga para frente do 360 (ex: 10 vira 370)
+    subset_start = df[df['Phi'] < margin].copy()
+    subset_start['Phi'] = subset_start['Phi'] + 360
+    
+    # Junta tudo. Agora temos dados de -40 até 400 graus!
+    df = pd.concat([df, subset_end, subset_start], ignore_index=True)
+
+    # O interpolador (griddata) agora vai ter vizinhos de sobra para calcular
+    # o 0 e o 360 sem deixar cicatriz nenhuma.
     return df, r_factor_total  # Retorna r_factor_total
 
 def interpolate_data(df, resolution=1000):
+    # Converte os dados de entrada para radianos
     phi = np.radians(df['Phi'])
     theta = np.radians(df['Theta'])
     intensity = df['intensitycal']
 
-    phi_grid = np.linspace(np.min(phi), np.max(phi), resolution)
+    # --- A MUDANÇA ESTÁ AQUI ---
+    # Em vez de usar min(phi) e max(phi), forçamos o grid a ser estritamente 0 a 2pi.
+    # endpoint=False é importante para não duplicar o 360 agora (faremos a costura depois)
+    phi_grid = np.linspace(0, 2 * np.pi, resolution, endpoint=False)
+    
+    # Theta continua pegando do mínimo ao máximo dos dados
     theta_grid = np.linspace(np.min(theta), np.max(theta), resolution)
 
     phi_grid, theta_grid = np.meshgrid(phi_grid, theta_grid)
 
+    # O griddata vai olhar para seus dados extendidos (-40 a 400) 
+    # e preencher esse grid (0 a 360) perfeitamente.
     intensity_grid = griddata((phi, theta), intensity, (phi_grid, theta_grid), method='cubic')
 
     return phi_grid, theta_grid, intensity_grid
-
 def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=None, save_path=None):
     plt.ion()
     
-    # 1. Interpolação inicial
+    # 1. Interpolação (Agora gera apenas 0 a 360, limpo)
     phi_grid, theta_grid, intensity_grid = interpolate_data(df, resolution)
-    sigma = 6
-    # 2. Suavização (Smoothing) com Padding Cíclico
+    
+    sigma = 4 # Pode ajustar esse valor
+
+    # 2. Tratamento de NaNs antes do filtro (Segurança extra)
+    # Se houver algum buraco, preenchemos com 0 para o filtro não estourar
+    intensity_grid = np.nan_to_num(intensity_grid, nan=0.0)
+
+    # 3. Suavização
     if sigma > 0:
-        pad_size = int(3 * sigma) + 1
-        # Envolve a matriz para o filtro "entender" que é um cilindro
-        grid_padded = np.pad(intensity_grid, ((0, 0), (pad_size, pad_size)), mode='wrap')
-        grid_smoothed = gaussian_filter(grid_padded, sigma=sigma)
-        # Corta as bordas extras
-        intensity_grid = grid_smoothed[:, pad_size:-pad_size]
+        # mode='wrap' garante que o filtro entenda que o lado esquerdo conecta com o direito
+        intensity_grid = gaussian_filter(intensity_grid, sigma=sigma, mode='wrap')
 
-    # --- 3. O PULO DO GATO: COSTURA DO FECHAMENTO (STITCHING) ---
-    # Adicionamos uma coluna extra no final igual à primeira para fechar o anel visualmente
+    # 4. Costura Final (Stitching) para fechar o anel visualmente
+    # Adicionamos o ponto 360 igual ao ponto 0
+    phi_col0 = phi_grid[:, 0:1] + 2 * np.pi # Pega o início e projeta em 360
+    theta_col0 = theta_grid[:, 0:1]
+    inten_col0 = intensity_grid[:, 0:1]
     
-    # Pega a primeira coluna de intensidade e anexa ao final
-    intensity_grid = np.hstack((intensity_grid, intensity_grid[:, 0:1]))
-    
-    # Pega a primeira coluna de Theta e anexa ao final (mantém a altura)
-    theta_grid = np.hstack((theta_grid, theta_grid[:, 0:1]))
-    
-    # Pega a primeira coluna de Phi, soma 2pi (360 graus) e anexa ao final
-    # Isso garante que a malha geométrica se encontre perfeitamente
-    phi_grid = np.hstack((phi_grid, phi_grid[:, 0:1] + 2 * np.pi))
-    # ------------------------------------------------------------
+    phi_grid = np.hstack([phi_grid, phi_col0])
+    theta_grid = np.hstack([theta_grid, theta_col0])
+    intensity_grid = np.hstack([intensity_grid, inten_col0])
 
-    # Criando o gráfico polar
+    # Plotagem
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(10, 8), dpi=100)
-
-    # Plotando
     c = ax.pcolormesh(phi_grid, theta_grid, intensity_grid, shading='gouraud', cmap='afmhot')
 
-    # ... (O RESTO DO SEU CÓDIGO DE CONFIGURAÇÃO PERMANECE IGUAL) ...
+    # ... (O RESTO DO CÓDIGO PERMANECE IGUAL) ...
     max_theta = df['Theta'].max()
     ax.set_ylim(0, np.radians(max_theta))
 
@@ -253,7 +266,6 @@ def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=N
         plt.savefig(save_path, dpi=200, bbox_inches='tight')
 
     plt.pause(600)
-
 # Caminho do arquivo
 file_path = 'expGarotate.txt'
 save_path = 'grafico_polar3.png'
