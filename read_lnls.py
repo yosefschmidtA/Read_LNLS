@@ -476,14 +476,44 @@ print(f"Dados salvos em {output_txt_file}")
 
 
 def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_evaluate=None):
-    # Lê os dados do arquivo, pulando a primeira linha
-    data = pd.read_csv(input_file, sep='\s+', skiprows=1, names=['theta', 'phi', 'intensity'])
+    """
+    Processa o ajuste polinomial (I0) com plotagem otimizada (Janela Reutilizável).
+    """
+    
+    # Lê os dados do arquivo
+    data = pd.read_csv(input_file, sep=r'\s+', skiprows=1, names=['theta', 'phi', 'intensity'])
 
     # Agrupa os dados por theta
     grouped = data.groupby('theta')
 
     # Lista para armazenar os resultados
     results = []
+    
+    # --- SETUP VISUAL (Cria a janela UMA VEZ) ---
+    fig_poly = None
+    ax_poly = None
+    line_exp = None
+    line_fit = None
+    
+    # Verifica se deve plotar (assumindo que indice > 0 habilita plots)
+    if indice_de_plotagem >= 1:
+        plt.ion()
+        fig_poly, ax_poly = plt.subplots(figsize=(8, 6))
+        
+        # Estilo "Completo" (não minimalista): Bolinhas Azuis e Linha Vermelha
+        line_exp, = ax_poly.plot([], [], 'bo', label="Experimental", alpha=0.6)
+        line_fit, = ax_poly.plot([], [], 'r-', label="Polynomial Fitting", linewidth=2)
+        
+        ax_poly.set_xlabel("Phi")
+        ax_poly.set_ylabel("Intensity")
+        ax_poly.legend(loc='best')
+        ax_poly.grid(True) # Mantemos a grade
+        
+        plt.show(block=False)
+        
+        # Cria diretório para salvar as imagens
+        save_dir = "PoliThird"
+        os.makedirs(save_dir, exist_ok=True)
 
     # Processa cada grupo de theta
     for theta, group in grouped:
@@ -497,29 +527,37 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
             results.append({'theta': theta, 'a': a, 'b': b, 'c': c, 'd': d})
 
             # Criando valores de phi de acordo com o intervalo definido
-            phi_fine = np.arange(phii, phif + dphi, dphi)  # Usando phi_values
+            phi_fine = np.arange(phii, phif + dphi, dphi) 
             intensity_fitted = polynomial_3(phi_fine, *popt)
-            save_dir = "PoliThird"
-            '''os.makedirs(save_dir, exist_ok=True)
-            # Plotando os dados e o ajuste
-            plt.figure(figsize=(8, 6))
-            plt.plot(phi, intensity, linestyle='-', color='blue', alpha=0.5, label="Experimental")
-            plt.plot(phi_fine, intensity_fitted, label="Polynomial Fitting", color="red", linewidth=2)
-            plt.title(f"Third-Degree Polynomial Fit - Theta = {theta}")
-            plt.xlabel("Phi")
-            plt.ylabel("Intensity")
-            plt.legend()
-            plt.grid()'''
-            #filename = f"PoliCurve{theta}.jpg"
-            #filepath = os.path.join(save_dir, filename)
-            # Salvar a figura
-            #plt.savefig(filepath, dpi=100, bbox_inches='tight')
-            #plt.show()
-            #plt.pause(poli_tempo)
-            #plt.close()
 
+            # --- ATUALIZAÇÃO VISUAL (Dentro do Loop) ---
+            if indice_de_plotagem >= 1:
+                # 1. Atualiza dados
+                line_exp.set_data(phi, intensity)
+                line_fit.set_data(phi_fine, intensity_fitted)
+                
+                # 2. Atualiza Título
+                ax_poly.set_title(f"Third-Degree Polynomial Fit - Theta = {theta:.1f}")
+                
+                # 3. Reajusta Escala (Zoom automático)
+                ax_poly.relim()
+                ax_poly.autoscale_view()
+                
+                # 4. Desenha e Pausa
+                plt.draw()
+                
+                # Salva a imagem atual (opcional, comente se quiser mais velocidade)
+                filename = f"PoliCurve{theta:.1f}.jpg"
+                filepath = os.path.join(save_dir, filename)
+                fig_poly.savefig(filepath, dpi=80, bbox_inches='tight')
+                
+                # Pausa controlada pelo config
+                if poli_tempo > 0:
+                    plt.pause(poli_tempo)
+                else:
+                    plt.pause(0.001)
 
-            # Se phi_values_to_evaluate for fornecido, calcule os valores para os pontos de phi fornecidos
+            # Se phi_values_to_evaluate for fornecido (mantido do seu código original)
             if phi_values_to_evaluate is not None:
                 for phi_value in phi_values_to_evaluate:
                     intensity_at_phi = polynomial_3(phi_value, *popt)
@@ -535,7 +573,6 @@ def process_and_plot(input_file, output_file, plot_dir="plots", phi_values_to_ev
     # Salva os coeficientes no arquivo de saída
     results_df.to_csv(output_file, index=False, float_format='%.6f')
     print(f"Resultados salvos em {output_file}")
-
     # Formato do cabeçalho do arquivo de saída
     num_theta = results_df['theta'].nunique()  # Número de ângulos theta únicos
     num_phi = len(phi_fine)  # Número de ângulos phi únicos
