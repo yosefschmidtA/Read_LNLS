@@ -1,4 +1,6 @@
 import time
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtCore, QtWidgets
 def carregar_config(arquivo):
     parametros = {}
     with open(arquivo, 'r') as f:
@@ -224,63 +226,69 @@ with open(output_file_xps, 'w') as log_file:
 
 def process_file(file_name, output_file):
     """
-    Versão CONFIG TOTAL: Lê chutes e limites exatos do arquivo de configuração.
-    Visualização: Modo IDL (Rápido) com distinção clara entre dados e fit.
+    Versão FINAL (PyQtGraph): Shirley (1) e Gaussianas (2).
+    Performance com estilo visual IDL.
     """
 
-    # --- CONFIGURAÇÃO VISUAL ---
-    fig_plot = None
-    ax_plot = None
+    # --- CONFIGURAÇÃO VISUAL (PyQtGraph) ---
+    app = None
+    win = None
+    plot_widget = None
     
-    # Shirley
-    line_orig = line_bg = line_corr = None
+    # Curvas Shirley
+    c_orig = c_bg = c_corr = None
     
-    # Gaussianas
-    line_g_data = line_g1 = line_g2 = line_g_sum = None
+    # Curvas Gaussianas
+    c_g_data = c_g1 = c_g2 = c_g_sum = None
 
-    plt.ion() 
-
-    # 1. SETUP SHIRLEY (Rápido)
-    if indice_de_plotagem == 1:
-        fig_plot, ax_plot = plt.subplots(figsize=(8, 5))
-        line_orig, = ax_plot.plot([], [], 'k-', label='Raw', linewidth=1.5)
-        line_bg, = ax_plot.plot([], [], 'k--', label='Background', linewidth=1)
-        line_corr, = ax_plot.plot([], [], 'r-', label='Corrected', linewidth=1.5)
-        ax_plot.set_ylabel('Intensity')
-        ax_plot.set_title("Modo Shirley")
-        ax_plot.grid(False)
-        plt.show(block=False)
-
-    # 2. SETUP GAUSSIANAS (Detalhado)
-    elif indice_de_plotagem == 2:
-        fig_plot, ax_plot = plt.subplots(figsize=(8, 5))
-        
-        # 'ko' = Bolinhas pretas para os dados corrigidos (Experimental)
-        line_g_data, = ax_plot.plot([], [], 'ko', label='Corrected Data', markersize=5)
-        
-        # Componentes do fit (Tracejado)
-        line_g1, = ax_plot.plot([], [], 'b--', label='G1', linewidth=1)
-        line_g2, = ax_plot.plot([], [], 'g--', label='G2', linewidth=1)
-        
-        # Soma do Fit (Linha Sólida Vermelha)
-        line_g_sum, = ax_plot.plot([], [], 'r-', label='Fit Sum', linewidth=2)
-        
-        ax_plot.set_ylabel('Intensity')
-        ax_plot.set_title("Modo Gaussianas")
-        ax_plot.grid(False)
-        plt.show(block=False)
-
+    # Verifica se vai plotar (1 ou 2)
     if indice_de_plotagem in [1, 2]:
+        # Configuração Global (Fundo Preto / Texto Branco)
+        pg.setConfigOption('background', 'k')
+        pg.setConfigOption('foreground', 'w')
+        
+        app = pg.mkQApp("XPS Analyzer")
+        win = pg.GraphicsLayoutWidget(show=True, title="XPS Analysis")
+        win.resize(900, 600)
+        
+        plot_widget = win.addPlot(title="Aguardando dados...")
+        plot_widget.setLabel('left', "Intensity")
+        plot_widget.setLabel('bottom', "Channel")
+        plot_widget.showGrid(x=False, y=False) # Sem grade para ficar limpo igual IDL
+        
+        # Legenda
+        legend = plot_widget.addLegend()
+
+        # --- SETUP SHIRLEY (Modo 1) ---
+        if indice_de_plotagem == 1:
+            # Raw: Bolinhas Brancas
+            c_orig = plot_widget.plot(pen=None, symbol='o', symbolSize=4, symbolBrush='w', name='Raw')
+            # Bg: Branco Tracejado
+            c_bg = plot_widget.plot(pen=pg.mkPen('w', style=QtCore.Qt.DashLine), name='Background')
+            # Corr: Vermelho Sólido
+            c_corr = plot_widget.plot(pen=pg.mkPen('r', width=2), name='Corrected')
+
+        # --- SETUP GAUSSIANAS (Modo 2) ---
+        elif indice_de_plotagem == 2:
+            # Dados Corrigidos: Bolinhas Brancas
+            c_g_data = plot_widget.plot(pen=None, symbol='o', symbolSize=5, symbolBrush='w', name='Data')
+            # G1: Azul Tracejado
+            c_g1 = plot_widget.plot(pen=pg.mkPen('b', style=QtCore.Qt.DashLine, width=1.5), name='G1')
+            # G2: Verde Tracejado
+            c_g2 = plot_widget.plot(pen=pg.mkPen('g', style=QtCore.Qt.DashLine, width=1.5), name='G2')
+            # Soma: Vermelho Sólido Grosso
+            c_g_sum = plot_widget.plot(pen=pg.mkPen('r', width=3), name='Fit Sum')
+
+        # Cria diretório se necessário
         save_dir = "XPS_Plots"
         os.makedirs(save_dir, exist_ok=True)
 
-
     def process_block(block, theta_values, phi_values):
-        # --- Definições Matemáticas ---
+        # --- Definições Matemáticas (MANTIDAS) ---
         def doniach_sunjic(x, amp, mean, gamma, beta):
             denom = (x - mean) ** 2 + gamma ** 2
             return (amp / np.pi) * (gamma / denom) * (1 + beta * (x - mean) / denom)
-
+        
         def double_doniach(x, amp1, mean1, gamma1, beta1, amp2, mean2, gamma2, beta2):
             return (doniach_sunjic(x, amp1, mean1, gamma1, beta1) + doniach_sunjic(x, amp2, mean2, gamma2, beta2))
 
@@ -296,7 +304,7 @@ def process_file(file_name, output_file):
 
         y_smoothed_raw = smooth(y_values, sigma=2.0)
         
-        # Shirley Background
+        # Shirley
         init_back = 1
         end_back = len(x_values) - 1
         shirley_bg_smoothed = shirley_background(x_values, y_smoothed_raw, init_back, end_back)
@@ -305,37 +313,26 @@ def process_file(file_name, output_file):
         positive_values = y_corrected_smoothed.copy()
         positive_values[positive_values < 0] = 0
         
-        # --- Fitting (Configuração Total via Arquivo) ---
+        # --- Fitting Gaussianas (Lendo do Config) ---
         fitted_g1 = np.zeros_like(x_values)
         fitted_g2 = np.zeros_like(x_values)
         fitted_sum = np.zeros_like(x_values)
-
-        # Área padrão = Experimental Total (caso gaures=0 ou falha no fit)
-        area_final = trapezoid(positive_values, x_values)
+        area_final = trapezoid(positive_values, x_values) # Padrão
 
         if indice_de_plotagem == 2:
             try:
-                # 1. Monta o Chute Inicial (_ini) lendo do dicionário global 'parametros'
+                # Pega chutes e limites do config
                 initial_guess = [
                     parametros['g1_amp_ini'], parametros['g1_pos_ini'], parametros['g1_wid_ini'],
                     parametros['g2_amp_ini'], parametros['g2_pos_ini'], parametros['g2_wid_ini']
                 ]
-                
-                # 2. Monta os Limites Inferiores (_min) e Superiores (_max)
-                bounds_min = [
-                    parametros['g1_amp_min'], parametros['g1_pos_min'], parametros['g1_wid_min'],
-                    parametros['g2_amp_min'], parametros['g2_pos_min'], parametros['g2_wid_min']
-                ]
-                
-                bounds_max = [
-                    parametros['g1_amp_max'], parametros['g1_pos_max'], parametros['g1_wid_max'],
-                    parametros['g2_amp_max'], parametros['g2_pos_max'], parametros['g2_wid_max']
-                ]
-                
-                # A função curve_fit espera bounds no formato ([mins], [maxs])
-                bounds = (bounds_min, bounds_max)
+                bounds = (
+                    [parametros['g1_amp_min'], parametros['g1_pos_min'], parametros['g1_wid_min'],
+                     parametros['g2_amp_min'], parametros['g2_pos_min'], parametros['g2_wid_min']],
+                    [parametros['g1_amp_max'], parametros['g1_pos_max'], parametros['g1_wid_max'],
+                     parametros['g2_amp_max'], parametros['g2_pos_max'], parametros['g2_wid_max']]
+                )
 
-                # 3. Realiza o Fit
                 popt, _ = curve_fit(double_gaussian, x_values, positive_values, p0=initial_guess, bounds=bounds)
                 amp1, mean1, std1, amp2, mean2, std2 = popt
                 
@@ -343,50 +340,41 @@ def process_file(file_name, output_file):
                 fitted_g2 = gaussian_fit(x_values, amp2, mean2, std2)
                 fitted_sum = fitted_g1 + fitted_g2
 
-                # 4. Define qual área retornar baseado no 'gaures' do config
+                # Seleciona área de retorno
                 tipo_retorno = parametros.get('gaures', 0)
-                
-                if tipo_retorno == 1:
-                    area_final = trapezoid(fitted_g1, x_values) # Área G1
-                elif tipo_retorno == 2:
-                    area_final = trapezoid(fitted_g2, x_values) # Área G2
-                elif tipo_retorno == 3:
-                    area_final = trapezoid(fitted_sum, x_values) # Área da Soma Fitada
+                if tipo_retorno == 1: area_final = trapezoid(fitted_g1, x_values)
+                elif tipo_retorno == 2: area_final = trapezoid(fitted_g2, x_values)
+                elif tipo_retorno == 3: area_final = trapezoid(fitted_sum, x_values)
 
-            except Exception as e:
-                # Se falhar (ex: chave faltando no config ou erro matemático), mantém área experimental
-                # print(f"Fit failed or config missing: {e}")
-                pass
+            except Exception:
+                pass # Falha silenciosa no fit para não travar visualização
 
         print(f"Theta: {float(theta_values):.1f} | Phi: {float(phi_values):.1f} | Area: {area_final:.2f}")
 
-        # --- ATUALIZAÇÃO VISUAL ---
+        # --- ATUALIZAÇÃO VISUAL (PyQtGraph) ---
         if indice_de_plotagem in [1, 2]:
-            ax_plot.set_title(f"T:{float(theta_values):.0f} P:{float(phi_values):.0f}", fontsize=10)
+            
+            plot_widget.setTitle(f"Theta: {float(theta_values):.1f} | Phi: {float(phi_values):.1f}")
 
             if indice_de_plotagem == 1:
-                line_orig.set_data(x_values, y_smoothed_raw)
-                line_bg.set_data(x_values, shirley_bg_smoothed)
-                line_corr.set_data(x_values, y_corrected_smoothed)
+                c_orig.setData(x_values, y_smoothed_raw)
+                c_bg.setData(x_values, shirley_bg_smoothed)
+                c_corr.setData(x_values, y_corrected_smoothed)
 
             elif indice_de_plotagem == 2:
-                # Dados corrigidos (bolinhas pretas)
-                line_g_data.set_data(x_values, positive_values) 
-                # Componentes e Soma (linhas)
-                line_g1.set_data(x_values, fitted_g1)
-                line_g2.set_data(x_values, fitted_g2)
-                line_g_sum.set_data(x_values, fitted_sum)
-
-            ax_plot.relim()
-            ax_plot.autoscale_view()
-            plt.draw()
+                c_g_data.setData(x_values, positive_values)
+                c_g1.setData(x_values, fitted_g1)
+                c_g2.setData(x_values, fitted_g2)
+                c_g_sum.setData(x_values, fitted_sum)
+            
+            # Mágica da velocidade
+            app.processEvents()
             
             if shirley_tempo > 0:
-                plt.pause(shirley_tempo)
-            else:
-                plt.pause(0.001)
+                time.sleep(shirley_tempo)
 
         return list(zip(y_corrected_smoothed, x_values)), area_final
+
     with open(file_name, 'r') as file:
         data = file.readlines()
 
