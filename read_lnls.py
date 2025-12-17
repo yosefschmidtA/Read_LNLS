@@ -1103,3 +1103,4 @@ df, df_plot = process_file(file_path, 1, rotate_angle)
 
 save_to_txt_with_blocks(df, arquivo_saida)
 
+

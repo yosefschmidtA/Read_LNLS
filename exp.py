@@ -71,7 +71,7 @@ def calcular_r_factor(df):
     return resultados, angulos, r_factor_medio, r_factor_total
 
 
-def process_file(file_path):
+def process_file_plot(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
 
@@ -177,7 +177,7 @@ def process_file(file_path):
     # o 0 e o 360 sem deixar cicatriz nenhuma.
     return df, r_factor_total  # Retorna r_factor_total
 
-def interpolate_data(df, resolution=1000):
+def interpolate_data_plot(df, resolution=1000):
     # Converte os dados de entrada para radianos
     phi = np.radians(df['Phi'])
     theta = np.radians(df['Theta'])
@@ -198,11 +198,11 @@ def interpolate_data(df, resolution=1000):
     intensity_grid = griddata((phi, theta), intensity, (phi_grid, theta_grid), method='cubic')
 
     return phi_grid, theta_grid, intensity_grid
-def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=None, save_path=None):
+def plot_polar_interpolated_plot(df, resolution=500, line_position=0.5, my_variable=None, save_path=None):
     plt.ion()
     
     # 1. Interpolação (Agora gera apenas 0 a 360, limpo)
-    phi_grid, theta_grid, intensity_grid = interpolate_data(df, resolution)
+    phi_grid, theta_grid, intensity_grid = interpolate_data_plot(df, resolution)
     
     sigma = 4 # Pode ajustar esse valor
 
@@ -269,7 +269,7 @@ def plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=N
 # Caminho do arquivo
 file_path = 'teste.txt'
 save_path = 'grafico_polar3.png'
-df,r_total = process_file(file_path)
+df,r_total = process_file_plot(file_path)
 #r_factor_total=0.276
 my_variable = "Experimental"
-plot_polar_interpolated(df, resolution=500, line_position=0.5, my_variable=my_variable, save_path=save_path)
+plot_polar_interpolated_plot(df, resolution=500, line_position=0.5, my_variable=my_variable, save_path=save_path)
