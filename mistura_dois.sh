@@ -9,8 +9,8 @@ fi
 
 passo=$1
 
-cp OBmix.out tempA.txt;
-cp OAmix.out  tempB.txt;
+cp OB.out tempA.txt;
+cp OA.out  tempB.txt;
 
 # Construindo os Vetores Necessários
 

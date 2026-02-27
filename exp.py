@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-
+import sys
 def calcular_r_factor(df):
     resultados = []
     angulos = []
@@ -266,10 +266,18 @@ def plot_polar_interpolated_plot(df, resolution=500, line_position=0.5, my_varia
         plt.savefig(save_path, dpi=200, bbox_inches='tight')
 
     plt.pause(600)
-# Caminho do arquivo
-file_path = 'teste.txt'
-save_path = 'grafico_polar3.png'
-df,r_total = process_file_plot(file_path)
-#r_factor_total=0.276
-my_variable = "Experimental"
-plot_polar_interpolated_plot(df, resolution=500, line_position=0.5, my_variable=my_variable, save_path=save_path)
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1] # Pega o primeiro argumento após o nome do script
+    else:
+        print("Erro: Nenhum arquivo fornecido.")
+        print("Uso correto: python3 exp.py <nome_do_arquivo.txt>")
+        sys.exit(1) # Encerra o script com erro se não tiver arquivo
+
+    save_path = 'grafico_exp.png'
+    
+    df, r_total = process_file_plot(file_path)
+    
+    my_variable = "Experimental"
+    plot_polar_interpolated_plot(df, resolution=500, line_position=0.5, my_variable=my_variable, save_path=save_path)

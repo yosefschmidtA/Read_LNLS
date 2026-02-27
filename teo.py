@@ -18,8 +18,6 @@ def calcular_r_factor(df):
 
     for theta in angulos_unicos:
         subset = df[df['Theta'] == theta]
-        # Garante que ordena por Phi para o cálculo bater linha a linha se necessário
-        # (Se os dados já vierem ordenados, não afeta)
         phi = subset['Phi'].values
         intensidade_calculada = np.round(subset['intensitycal'].values, 10)
         intensidade_experimental = np.round(subset['intensityexp'].values, 10)
@@ -72,19 +70,17 @@ def calcular_r_factor(df):
 
     return resultados, angulos, r_factor_medio, r_factor_total
 
-
 def process_file(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
 
     data = []
     theta_value = None
+    lista_temporaria = []
 
-    # Começa da linha 26 (ajuste se seu cabeçalho mudar)
     for i in range(26, len(lines)):
         line = lines[i].strip()
 
-        # Parar a leitura ao encontrar "fitted parameters ("
         if "fitted parameters (" in line:
             break
 
@@ -92,19 +88,36 @@ def process_file(file_path):
             parts = line.split()
 
             if len(parts) == 7:
+                # Encontrou um novo Theta, processa os dados acumulados
+                if lista_temporaria:
+                    intensi2_values = [item[1] for item in lista_temporaria]
+                    media_intensi2 = sum(intensi2_values) / len(intensi2_values)
+
+                    for phi, intensi1, intensi2, intensityexp in lista_temporaria:
+                        intensitycal = (intensi1 - media_intensi2) / media_intensi2
+                        data.append([phi, intensitycal, theta_value, intensityexp, True])
+
+                    lista_temporaria = []
+
                 theta_value = float(parts[3])
 
             elif len(parts) == 5 and theta_value is not None:
                 phi = float(parts[0])
                 intensi1 = float(parts[1])
                 intensi2 = float(parts[2])
-                # Evita divisão por zero se intensi2 for 0
-                intensitycal = float((intensi1-intensi2)/intensi2) if intensi2 != 0 else 0.0
                 intensityexp = float(parts[4])
-                data.append([phi, intensitycal, theta_value, intensityexp, True])  # Marcar como original
+                lista_temporaria.append((phi, intensi1, intensi2, intensityexp))
+
+    # Depois do loop, processa o último conjunto também
+    if lista_temporaria:
+        intensi2_values = [item[1] for item in lista_temporaria]
+        media_intensi2 = sum(intensi2_values) / len(intensi2_values)
+
+        for phi, intensi1, intensi2, intensityexp in lista_temporaria:
+            intensitycal = (intensi1 - media_intensi2) / media_intensi2
+            data.append([phi, intensitycal, theta_value, intensityexp, True])
 
     df = pd.DataFrame(data, columns=['Phi', 'intensitycal', 'Theta', 'intensityexp', 'IsOriginal'])
-    
     # 1. CÁLCULO DO R-FACTOR (Nos dados originais)
     resultados, angulos, r_factor_medio, r_factor_total = calcular_r_factor(df)
     for theta, r_factor in zip(angulos, resultados):

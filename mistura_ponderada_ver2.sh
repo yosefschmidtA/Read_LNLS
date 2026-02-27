@@ -1,7 +1,7 @@
 #!/bin/bash
 
-cp OBmix.out  tempA.txt;
-cp OAmix.out  tempB.txt;
+cp OB.out  tempA.txt;
+cp OA.out  tempB.txt;
 
 # Construindo os Vetores Necessarios
 
@@ -20,7 +20,7 @@ linhas=$(echo "$linhas -1" | bc); # subtrai um, pois o vetor comeca no indice 0
 
 for i in `seq 0 $linhas`;
        do
-             coluna2[$i]=$(echo "print ${coluna2A[$i]}*0.79+${coluna2B[$i]}*0.21" | python);
+             coluna2[$i]=$(echo "print ${coluna2A[$i]}*0.78+${coluna2B[$i]}*0.22" | python);
              echo "Construindo linha $i de $linhas";
        done;
 
